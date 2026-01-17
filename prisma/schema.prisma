@@ -1,0 +1,182 @@
+// 1. Configuración
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 2. Enums (Para restringir valores y evitar errores)
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  QR
+  OTHER
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum TransactionType {
+  SALE           // Salida por venta
+  PURCHASE       // Entrada por compra
+  ADJUSTMENT_IN  // Entrada por ajuste (inventario inicial o corrección)
+  ADJUSTMENT_OUT // Salida por merma/robo/error
+  RETURN         // Entrada por devolución de cliente
+}
+
+// 3. Modelos de Catálogo (Definición del Producto)
+
+model Brand {
+  id        Int       @id @default(autoincrement())
+  name      String
+  isActive  Boolean   @default(true)
+  products  Product[] // Relación: Una marca tiene muchos productos
+}
+
+model Category {
+  id          Int        @id @default(autoincrement())
+  name        String
+  description String?    @db.Text
+  
+  // Relación Recursiva (Subcategorías)
+  parentId    Int?       // Puede ser nulo (si es categoría raíz)
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  
+  products    Product[]
+}
+
+model Size {
+  id       Int              @id @default(autoincrement())
+  value    String           // Ej: "40", "41", "XL" (String es más flexible que Int para tallas)
+  variants ProductVariant[]
+}
+
+model Color {
+  id       Int              @id @default(autoincrement())
+  name     String           // Ej: "Negro"
+  variants ProductVariant[]
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?  @db.Text
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  brandId     Int
+  brand       Brand    @relation(fields: [brandId], references: [id])
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id])
+  variants    ProductVariant[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 4. Inventario Real (Variantes)
+
+model ProductVariant {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id])
+  sizeId        Int
+  size          Size     @relation(fields: [sizeId], references: [id])
+  colorId       Int
+  color         Color    @relation(fields: [colorId], references: [id])
+  sku           String   @unique
+  barcode       String?
+  purchasePrice Decimal  @db.Decimal(10, 2)
+  salePrice     Decimal  @db.Decimal(10, 2)
+  stockQuantity Int      @default(0)
+  minStockLevel Int      @default(5)
+  saleDetails   SaleDetail[]
+  kardex        InventoryTransaction[]
+}
+
+// 5. Módulo de Ventas
+
+model CashRegister {
+  id    Int    @id @default(autoincrement())
+  name  String
+  sales Sale[]
+}
+
+model Sale {
+  id             Int           @id @default(autoincrement())
+  invoiceNumber  String?
+  totalAmount    Decimal       @db.Decimal(10, 2)
+  status         SaleStatus    @default(COMPLETED)
+  userId         Int           // Empleado que vendió
+  user           User          @relation(fields: [userId], references: [id])
+  customerId     Int?          // Cliente (opcional)
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  cashRegisterId Int
+  cashRegister   CashRegister  @relation(fields: [cashRegisterId], references: [id])
+  createdAt      DateTime      @default(now())
+  details        SaleDetail[]
+  payments       Payment[]
+}
+
+model SaleDetail {
+  id               Int            @id @default(autoincrement())
+  saleId           Int
+  sale             Sale           @relation(fields: [saleId], references: [id])
+  productVariantId Int
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
+  quantity         Int
+  unitPrice        Decimal        @db.Decimal(10, 2)
+  subtotal         Decimal        @db.Decimal(10, 2)
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  saleId        Int
+  sale          Sale          @relation(fields: [saleId], references: [id])
+  
+  method        PaymentMethod
+  amount        Decimal       @db.Decimal(10, 2)
+}
+
+// 6. Actores y Auditoría
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  role      Role     @default(EMPLOYEE)
+  isActive  Boolean  @default(true)
+  sales     Sale[]
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  fullName  String
+  email     String?
+  phone     String?
+  taxId     String?
+  sales     Sale[]
+}
+
+model InventoryTransaction {
+  id               Int             @id @default(autoincrement())
+  productVariantId Int
+  productVariant   ProductVariant  @relation(fields: [productVariantId], references: [id])
+  type             TransactionType
+  quantity         Int             // Positivo para entrada, Negativo para salida
+  reference        String?         // ID de Venta o ID de Orden de Compra
+  description      String?         // "Ajuste por inventario inicial", etc.
+  createdAt        DateTime        @default(now())
+  
+  @@map("kardex") // Renombramos la tabla en la DB a "kardex" si prefieres ese nombre
+}
