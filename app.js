@@ -1,18 +1,41 @@
 import express from 'express';
-import productRoutes from './src/routes/productRoutes.js';
-import catalogRoutes from './src/routes/catalogRoutes.js';
-import saleRoutes from './src/routes/saleRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
+import categoriaRoutes from './src/routes/categoriaRoutes.js';
+import sucursalRoutes from './src/routes/sucursalRoutes.js';
+import cajaRoutes from './src/routes/cajaRoutes.js';
+import usuarioRoutes from './src/routes/usuarioRoutes.js';
+import productoRoutes from './src/routes/productoRoutes.js';
+import clienteRoutes from './src/routes/clienteRoutes.js';
+import proveedorRoutes from './src/routes/proveedorRoutes.js';
+import almacenRoutes from './src/routes/almacenRoutes.js';
+import inventarioRoutes from './src/routes/inventarioRoutes.js';
+import sesionCajaRoutes from './src/routes/sesionCajaRoutes.js';
+import ventaRoutes from './src/routes/ventaRoutes.js';
 
-//configuraciones de express
+// Configuraciones de express
 const app = express();
 
 // Middleware para parsear JSON
 app.use(express.json());
+
+// Rutas
 app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api', catalogRoutes);
-app.use('/api/sales', saleRoutes);
+app.use('/api/categorias', categoriaRoutes);
+app.use('/api/sucursales', sucursalRoutes);
+app.use('/api/cajas', cajaRoutes);
+app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/productos', productoRoutes);
+app.use('/api/clientes', clienteRoutes);
+app.use('/api/proveedores', proveedorRoutes);
+app.use('/api/almacenes', almacenRoutes);
+app.use('/api/inventarios', inventarioRoutes);
+app.use('/api/sesion-caja', sesionCajaRoutes);
+app.use('/api/ventas', ventaRoutes);
+
+// Ruta de health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

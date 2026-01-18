@@ -8,175 +8,323 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 2. Enums (Para restringir valores y evitar errores)
-enum Role {
-  ADMIN
-  EMPLOYEE
+// 2. Enums
+enum TipoUsuario {
+  cajero
+  vendedor
+  supervisor
+  administrador
 }
 
-enum PaymentMethod {
-  CASH
-  CARD
-  QR
-  OTHER
+enum EstadoCaja {
+  LIBRE
+  OCUPADA
+  CERRADA
 }
 
-enum SaleStatus {
-  COMPLETED
-  CANCELLED
-  REFUNDED
+enum EstadoSesionCaja {
+  ABIERTA
+  CERRADA
 }
 
-enum TransactionType {
-  SALE           // Salida por venta
-  PURCHASE       // Entrada por compra
-  ADJUSTMENT_IN  // Entrada por ajuste (inventario inicial o corrección)
-  ADJUSTMENT_OUT // Salida por merma/robo/error
-  RETURN         // Entrada por devolución de cliente
+enum TipoDocumento {
+  factura
+  boleta
+  ticket
 }
 
-// 3. Modelos de Catálogo (Definición del Producto)
+enum EstadoVenta {
+  completada
+  anulada
+}
 
-model Brand {
+enum TipoMovimientoCaja {
+  INGRESO
+  RETIRO
+}
+
+// 3. Modelos
+
+model Sucursal {
   id        Int       @id @default(autoincrement())
-  name      String
-  isActive  Boolean   @default(true)
-  products  Product[] // Relación: Una marca tiene muchos productos
+  nombre    String    @db.VarChar(100)
+  direccion String?   @db.VarChar(255)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  cajas     Caja[]
+  usuarios  Usuario[]
+  almacenes Almacen[]
+  productos Producto[]
+
+  @@map("sucursales")
 }
 
-model Category {
+model Caja {
   id          Int        @id @default(autoincrement())
-  name        String
-  description String?    @db.Text
-  
-  // Relación Recursiva (Subcategorías)
-  parentId    Int?       // Puede ser nulo (si es categoría raíz)
-  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children    Category[] @relation("CategoryHierarchy")
-  
-  products    Product[]
+  nombre      String     @db.VarChar(100)
+  sucursalId  Int        @map("sucursal_id")
+  estado      EstadoCaja @default(CERRADA)
+  codigo      String?    @db.VarChar(100)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  sucursal    Sucursal      @relation(fields: [sucursalId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sesiones    SesionCaja[]
+
+  @@map("cajas")
 }
 
-model Size {
-  id       Int              @id @default(autoincrement())
-  value    String           // Ej: "40", "41", "XL" (String es más flexible que Int para tallas)
-  variants ProductVariant[]
+model Usuario {
+  id         Int         @id @default(autoincrement())
+  nombres    String      @db.VarChar(100)
+  email      String      @unique @db.VarChar(100)
+  contrasena String      @db.VarChar(255)
+  nroDoc     String?     @map("nro_doc") @db.VarChar(20)
+  telefono   String?     @db.VarChar(20)
+  tipo       TipoUsuario @default(cajero)
+  estado     Boolean     @default(true)
+  sucursalId Int?        @map("sucursal_id")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  sucursal          Sucursal?          @relation(fields: [sucursalId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  permisos          PermisoUsuario[]
+  sesionesCaja      SesionCaja[]
+  ventas            Venta[]
+  movimientosCaja   MovimientoCaja[]
+  compras           Compra[]
+  movimientosInventario MovimientoInventario[]
+
+  @@map("usuarios")
 }
 
-model Color {
-  id       Int              @id @default(autoincrement())
-  name     String           // Ej: "Negro"
-  variants ProductVariant[]
+model PermisoUsuario {
+  usuarioId Int    @map("usuario_id")
+  permiso   String @db.VarChar(50)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, permiso])
+  @@map("permisos_usuarios")
 }
 
-model Product {
+model Categoria {
   id          Int      @id @default(autoincrement())
-  name        String
-  description String?  @db.Text
-  imageUrl    String?
-  isActive    Boolean  @default(true)
-  brandId     Int
-  brand       Brand    @relation(fields: [brandId], references: [id])
-  categoryId  Int
-  category    Category @relation(fields: [categoryId], references: [id])
-  variants    ProductVariant[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  nombre      String   @db.VarChar(100)
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  productos Producto[]
+
+  @@map("categorias")
 }
 
-// 4. Inventario Real (Variantes)
+model Producto {
+  id              Int      @id @default(autoincrement())
+  nombre          String   @db.VarChar(150)
+  categoriaId     Int      @map("categoria_id")
+  sucursalId      Int      @map("sucursal_id")
+  almacenId       Int      @map("almacen_id")
+  talla           String?  @db.VarChar(100) // Ej: "38, 39, 40, M, L, XL"
+  color           String?  @db.VarChar(100) // Ej: "Negro, Blanco, Rojo"
+  precioCompra    Decimal  @default(0.00) @map("precio_compra") @db.Decimal(10, 2)
+  precioVenta     Decimal  @default(0.00) @map("precio_venta") @db.Decimal(10, 2)
+  codigoBarras    String?  @unique @map("codigo_barras") @db.VarChar(100)
+  codigoInterno   String?  @map("codigo_interno") @db.VarChar(100)
+  stock           Int      @default(0)
+  stockMinimo     Int      @default(0) @map("stock_minimo")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-model ProductVariant {
-  id            Int      @id @default(autoincrement())
-  productId     Int
-  product       Product  @relation(fields: [productId], references: [id])
-  sizeId        Int
-  size          Size     @relation(fields: [sizeId], references: [id])
-  colorId       Int
-  color         Color    @relation(fields: [colorId], references: [id])
-  sku           String   @unique
-  barcode       String?
-  purchasePrice Decimal  @db.Decimal(10, 2)
-  salePrice     Decimal  @db.Decimal(10, 2)
-  stockQuantity Int      @default(0)
-  minStockLevel Int      @default(5)
-  saleDetails   SaleDetail[]
-  kardex        InventoryTransaction[]
+  categoria       Categoria        @relation(fields: [categoriaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sucursal        Sucursal         @relation(fields: [sucursalId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  almacen         Almacen          @relation(fields: [almacenId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  inventarios     Inventario[]
+  detalleVentas   DetalleVenta[]
+  detalleCompras  DetalleCompra[]
+  movimientosInventario MovimientoInventario[]
+
+  @@map("productos")
 }
 
-// 5. Módulo de Ventas
+model Almacen {
+  id         Int      @id @default(autoincrement())
+  nombre     String   @db.VarChar(100)
+  sucursalId Int      @map("sucursal_id")
+  ubicacion  String?  @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at")
 
-model CashRegister {
-  id    Int    @id @default(autoincrement())
-  name  String
-  sales Sale[]
+  sucursal    Sucursal     @relation(fields: [sucursalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  inventarios Inventario[]
+  productos   Producto[]
+  movimientosInventario MovimientoInventario[]
+
+  @@map("almacenes")
 }
 
-model Sale {
-  id             Int           @id @default(autoincrement())
-  invoiceNumber  String?
-  totalAmount    Decimal       @db.Decimal(10, 2)
-  status         SaleStatus    @default(COMPLETED)
-  userId         Int           // Empleado que vendió
-  user           User          @relation(fields: [userId], references: [id])
-  customerId     Int?          // Cliente (opcional)
-  customer       Customer?     @relation(fields: [customerId], references: [id])
-  cashRegisterId Int
-  cashRegister   CashRegister  @relation(fields: [cashRegisterId], references: [id])
-  createdAt      DateTime      @default(now())
-  details        SaleDetail[]
-  payments       Payment[]
+model Inventario {
+  id              Int     @id @default(autoincrement())
+  productoId      Int     @map("producto_id")
+  almacenId       Int     @map("almacen_id")
+  cantidad        Decimal @default(0) @db.Decimal(10, 2)
+  ubicacionFisica String? @map("ubicacion_fisica") @db.VarChar(100)
+
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  almacen  Almacen  @relation(fields: [almacenId], references: [id], onDelete: Cascade)
+
+  @@unique([productoId, almacenId], name: "unique_stock")
+  @@map("inventario")
 }
 
-model SaleDetail {
-  id               Int            @id @default(autoincrement())
-  saleId           Int
-  sale             Sale           @relation(fields: [saleId], references: [id])
-  productVariantId Int
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id])
-  quantity         Int
-  unitPrice        Decimal        @db.Decimal(10, 2)
-  subtotal         Decimal        @db.Decimal(10, 2)
+enum TipoMovimiento {
+  ENTRADA
+  SALIDA
+  AJUSTE
 }
 
-model Payment {
-  id            Int           @id @default(autoincrement())
-  saleId        Int
-  sale          Sale          @relation(fields: [saleId], references: [id])
-  
-  method        PaymentMethod
-  amount        Decimal       @db.Decimal(10, 2)
+model MovimientoInventario {
+  id          Int            @id @default(autoincrement())
+  productoId  Int            @map("producto_id")
+  almacenId   Int            @map("almacen_id")
+  tipo        TipoMovimiento
+  cantidad    Decimal        @db.Decimal(10, 2)
+  motivo      String?        @db.VarChar(255) // Ej: "Venta #123", "Compra #456", "Ajuste manual"
+  referencia  String?        // ID de venta, compra, etc.
+  usuarioId   Int?           @map("usuario_id") // Quien hizo el movimiento
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  producto    Producto       @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  almacen     Almacen        @relation(fields: [almacenId], references: [id], onDelete: Cascade)
+  usuario     Usuario?       @relation(fields: [usuarioId], references: [id])
+
+  @@map("movimientos_inventario")
 }
 
-// 6. Actores y Auditoría
-
-model User {
+model Cliente {
   id        Int      @id @default(autoincrement())
-  username  String   @unique
-  password  String
-  role      Role     @default(EMPLOYEE)
-  isActive  Boolean  @default(true)
-  sales     Sale[]
+  nombre    String   @db.VarChar(150)
+  email     String?  @db.VarChar(100)
+  direccion String?  @db.Text
+  celular   String?  @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  ventas Venta[]
+
+  @@map("clientes")
 }
 
-model Customer {
+model Proveedor {
   id        Int      @id @default(autoincrement())
-  fullName  String
-  email     String?
-  phone     String?
-  taxId     String?
-  sales     Sale[]
+  nombre    String   @db.VarChar(150)
+  direccion String?  @db.Text
+  celular   String?  @db.VarChar(20)
+  contacto  String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  compras Compra[]
+
+  @@map("proveedores")
 }
 
-model InventoryTransaction {
-  id               Int             @id @default(autoincrement())
-  productVariantId Int
-  productVariant   ProductVariant  @relation(fields: [productVariantId], references: [id])
-  type             TransactionType
-  quantity         Int             // Positivo para entrada, Negativo para salida
-  reference        String?         // ID de Venta o ID de Orden de Compra
-  description      String?         // "Ajuste por inventario inicial", etc.
-  createdAt        DateTime        @default(now())
-  
-  @@map("kardex") // Renombramos la tabla en la DB a "kardex" si prefieres ese nombre
+model SesionCaja {
+  id           Int              @id @default(autoincrement())
+  cajaId       Int              @map("caja_id")
+  usuarioId    Int              @map("usuario_id")
+  fechaInicio  DateTime         @default(now()) @map("fecha_inicio")
+  fechaFin     DateTime?        @map("fecha_fin")
+  montoInicial Decimal          @default(0.00) @map("monto_inicial") @db.Decimal(10, 2)
+  montoFinal   Decimal?         @map("monto_final") @db.Decimal(10, 2)
+  estado       EstadoSesionCaja @default(ABIERTA)
+
+  caja       Caja             @relation(fields: [cajaId], references: [id])
+  usuario    Usuario          @relation(fields: [usuarioId], references: [id])
+  ventas     Venta[]
+  movimientos MovimientoCaja[]
+
+  @@map("sesiones_caja")
+}
+
+model Venta {
+  id              Int           @id @default(autoincrement())
+  fecha           DateTime      @default(now())
+  clienteId       Int?          @map("cliente_id")
+  usuarioId       Int           @map("usuario_id")
+  sucursalId      Int           @map("sucursal_id")
+  cajaId          Int           @map("caja_id")
+  sesionCajaId    Int           @map("sesion_caja_id")
+  tipoDocumento   TipoDocumento @default(ticket) @map("tipo_documento")
+  numeroDocumento String?       @map("numero_documento") @db.VarChar(50)
+  total           Decimal       @db.Decimal(10, 2)
+  estado          EstadoVenta   @default(completada)
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  cliente    Cliente?       @relation(fields: [clienteId], references: [id])
+  usuario    Usuario        @relation(fields: [usuarioId], references: [id])
+  sesionCaja SesionCaja     @relation(fields: [sesionCajaId], references: [id])
+  detalles   DetalleVenta[]
+
+  @@map("ventas")
+}
+
+model DetalleVenta {
+  id             Int     @id @default(autoincrement())
+  ventaId        Int     @map("venta_id")
+  productoId     Int     @map("producto_id")
+  cantidad       Int
+  precioUnitario Decimal @map("precio_unitario") @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
+
+  venta    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@map("detalle_ventas")
+}
+
+model MovimientoCaja {
+  id           Int                @id @default(autoincrement())
+  sesionCajaId Int                @map("sesion_caja_id")
+  usuarioId    Int                @map("usuario_id")
+  tipo         TipoMovimientoCaja
+  monto        Decimal            @db.Decimal(10, 2)
+  motivo       String?            @db.Text
+  fecha        DateTime           @default(now())
+
+  sesionCaja SesionCaja @relation(fields: [sesionCajaId], references: [id])
+  usuario    Usuario    @relation(fields: [usuarioId], references: [id])
+
+  @@map("movimientos_caja")
+}
+
+model Compra {
+  id               Int      @id @default(autoincrement())
+  proveedorId      Int      @map("proveedor_id")
+  usuarioId        Int      @map("usuario_id")
+  sucursalId       Int      @map("sucursal_id")
+  fecha            DateTime @default(now())
+  total            Decimal  @db.Decimal(10, 2)
+  numeroComprobante String? @map("numero_comprobante") @db.VarChar(50)
+
+  proveedor Proveedor       @relation(fields: [proveedorId], references: [id])
+  usuario   Usuario         @relation(fields: [usuarioId], references: [id])
+  detalles  DetalleCompra[]
+
+  @@map("compras")
+}
+
+model DetalleCompra {
+  id           Int     @id @default(autoincrement())
+  compraId     Int     @map("compra_id")
+  productoId   Int     @map("producto_id")
+  cantidad     Int
+  precioCompra Decimal @map("precio_compra") @db.Decimal(10, 2)
+  subtotal     Decimal @db.Decimal(10, 2)
+
+  compra   Compra   @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@map("detalle_compras")
 }
