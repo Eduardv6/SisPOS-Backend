@@ -25,7 +25,7 @@ const getProductos = async (req, res) => {
                     sucursal: true,
                     almacen: true
                 },
-                orderBy: { createdAt: 'desc' }
+                orderBy: { nombre: 'asc' }
             })
         ]);
 

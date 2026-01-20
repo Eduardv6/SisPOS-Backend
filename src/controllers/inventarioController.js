@@ -60,7 +60,7 @@ const ajustarStock = async (req, res) => {
     
     try {
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Actualizar inventario
+            // 1. Actualizar inventario por almacén
             const inventario = await tx.inventario.upsert({
                 where: {
                     unique_stock: {
@@ -79,7 +79,15 @@ const ajustarStock = async (req, res) => {
                 }
             });
 
-            // 2. Registrar movimiento en Kardex
+            // 2. Actualizar stock total del producto
+            await tx.producto.update({
+                where: { id: parseInt(productoId) },
+                data: {
+                    stock: { increment: parseFloat(ajuste) }
+                }
+            });
+
+            // 3. Registrar movimiento en Kardex
             await tx.movimientoInventario.create({
                 data: {
                     productoId: parseInt(productoId),
