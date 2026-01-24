@@ -102,4 +102,67 @@ const deleteCaja = async (req, res) => {
     }
 };
 
-export { getCajas, getCajaById, createCaja, updateCaja, deleteCaja };
+// Abrir caja (aperturar)
+const abrirCaja = async (req, res) => {
+    const { id } = req.params;
+    const { montoInicial, usuarioId } = req.body;
+
+    // Validar usuarioId
+    if (!usuarioId) {
+        return res.status(400).json({ message: 'usuarioId es requerido' });
+    }
+
+    try {
+        // 1. Verificar que la caja existe
+        const caja = await prisma.caja.findUnique({
+            where: { id: parseInt(id) }
+        });
+
+        if (!caja) {
+            return res.status(404).json({ message: 'Caja no encontrada' });
+        }
+
+        // 2. Verificar que la caja no esté ocupada
+        if (caja.estado === 'OCUPADA') {
+            return res.status(400).json({ message: 'La caja ya está ocupada' });
+        }
+
+        // 3. Crear apertura y actualizar estado en transacción
+        const [apertura, cajaActualizada] = await prisma.$transaction([
+            prisma.sesionCaja.create({
+                data: {
+                    caja: { connect: { id: parseInt(id) } },
+                    usuario: { connect: { id: parseInt(usuarioId) } },
+                    montoInicial: parseFloat(montoInicial) || 0,
+                    estado: 'ABIERTA'
+                }
+            }),
+            prisma.caja.update({
+                where: { id: parseInt(id) },
+                data: { estado: 'OCUPADA' }
+            })
+        ]);
+
+        // 4. Retornar respuesta
+        res.status(201).json({
+            message: 'Caja aperturada exitosamente',
+            caja: {
+                id: cajaActualizada.id,
+                nombre: cajaActualizada.nombre,
+                estado: cajaActualizada.estado
+            },
+            apertura: {
+                id: apertura.id,
+                cajaId: apertura.cajaId,
+                usuarioId: apertura.usuarioId,
+                montoInicial: parseFloat(apertura.montoInicial),
+                fechaApertura: apertura.fechaInicio
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error al aperturar la caja' });
+    }
+};
+
+export { getCajas, getCajaById, createCaja, updateCaja, deleteCaja, abrirCaja };

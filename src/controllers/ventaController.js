@@ -4,96 +4,155 @@ const prisma = new PrismaClient();
 // Crear venta
 const createVenta = async (req, res) => {
     const {
-        items,           // Array: [{ productoId, cantidad, precioUnitario }, ...]
-        clienteId,       // Opcional
-        sesionCajaId,    // ID de la sesión de caja activa
-        tipoDocumento,   // factura, boleta, ticket
-        total
+        tipoDocumento,      // "factura" | "boleta" | "ticket"
+        numeroDocumento,    // Opcional - se genera automáticamente si no se proporciona
+        clienteId,          // Opcional
+        clienteNombre,      // Nombre del cliente (para mostrar)
+        cajaId,             // ID de la caja
+        usuarioId,          // ID del vendedor
+        metodoPago,         // "efectivo" | "tarjeta" | "credito" | "mixto"
+        montoRecibido,      // Monto pagado por el cliente
+        vuelto,             // Vuelto entregado
+        subtotal,
+        descuento,
+        total,
+        items               // Array de productos
     } = req.body;
 
-    const usuarioId = req.user.id;
-    const sucursalId = req.user.sucursalId;
-
+    // Validaciones básicas
     if (!items || items.length === 0) {
-        return res.status(400).json({ error: 'La venta debe tener al menos un producto' });
+        return res.status(400).json({ message: 'La venta debe tener al menos un producto' });
+    }
+
+    if (!cajaId || !usuarioId) {
+        return res.status(400).json({ message: 'cajaId y usuarioId son requeridos' });
     }
 
     try {
-        // Verificar sesión de caja activa
-        const sesion = await prisma.sesionCaja.findUnique({
-            where: { id: parseInt(sesionCajaId) },
-            include: { caja: true }
+        // 1. Verificar que la caja existe y está abierta
+        const caja = await prisma.caja.findUnique({
+            where: { id: parseInt(cajaId) },
+            include: { sucursal: true }
         });
 
-        if (!sesion || sesion.estado !== 'ABIERTA') {
-            return res.status(400).json({ error: 'No hay una sesión de caja activa válida' });
+        if (!caja) {
+            return res.status(404).json({ message: 'Caja no encontrada' });
         }
 
+        if (caja.estado !== 'OCUPADA') {
+            return res.status(400).json({ message: 'La caja no está abierta' });
+        }
+
+        // 2. Buscar la sesión de caja activa
+        const sesionActiva = await prisma.sesionCaja.findFirst({
+            where: {
+                cajaId: parseInt(cajaId),
+                estado: 'ABIERTA'
+            }
+        });
+
+        if (!sesionActiva) {
+            return res.status(400).json({ message: 'No hay una sesión de caja activa' });
+        }
+
+        // 3. Buscar almacén de la sucursal para actualizar inventario
+        const almacen = await prisma.almacen.findFirst({
+            where: { sucursalId: caja.sucursalId }
+        });
+
+        // 4. Ejecutar transacción
         const result = await prisma.$transaction(async (tx) => {
-            // Generar número de documento
-            const lastVenta = await tx.venta.findFirst({
-                orderBy: { id: 'desc' }
-            });
-            const numeroDocumento = `${tipoDocumento?.toUpperCase() || 'TKT'}-${String((lastVenta?.id || 0) + 1).padStart(8, '0')}`;
+            // Generar número de documento si no se proporciona
+            let numDoc = numeroDocumento;
+            if (!numDoc) {
+                const prefijo = tipoDocumento === 'factura' ? 'F' : tipoDocumento === 'boleta' ? 'B' : 'T';
+                const lastVenta = await tx.venta.findFirst({
+                    where: { tipoDocumento: tipoDocumento || 'ticket' },
+                    orderBy: { id: 'desc' }
+                });
+                numDoc = `${prefijo}001-${String((lastVenta?.id || 0) + 1).padStart(6, '0')}`;
+            }
 
             // Crear venta
             const venta = await tx.venta.create({
                 data: {
-                    usuarioId,
-                    sucursalId: sucursalId || sesion.caja.sucursalId,
-                    cajaId: sesion.cajaId,
-                    sesionCajaId: parseInt(sesionCajaId),
-                    clienteId: clienteId ? parseInt(clienteId) : null,
+                    usuario: { connect: { id: parseInt(usuarioId) } },
+                    sucursalId: caja.sucursalId,
+                    cajaId: parseInt(cajaId),
+                    sesionCaja: { connect: { id: sesionActiva.id } },
+                    ...(clienteId && { cliente: { connect: { id: parseInt(clienteId) } } }),
                     tipoDocumento: tipoDocumento || 'ticket',
-                    numeroDocumento,
+                    numeroDocumento: numDoc,
                     total: parseFloat(total),
                     estado: 'completada'
                 }
             });
 
-            // Crear detalles de venta
+            // Crear detalles de venta y actualizar inventario
             for (const item of items) {
-                const subtotal = item.cantidad * parseFloat(item.precioUnitario);
+                const itemSubtotal = item.cantidad * parseFloat(item.precioUnitario);
 
                 await tx.detalleVenta.create({
                     data: {
-                        ventaId: venta.id,
-                        productoId: parseInt(item.productoId),
+                        venta: { connect: { id: venta.id } },
+                        producto: { connect: { id: parseInt(item.productoId) } },
                         cantidad: parseInt(item.cantidad),
                         precioUnitario: parseFloat(item.precioUnitario),
-                        subtotal
+                        subtotal: itemSubtotal
                     }
                 });
 
-                // Actualizar inventario (si se controla stock)
-                const producto = await tx.producto.findUnique({
-                    where: { id: parseInt(item.productoId) }
+                // Actualizar stock del producto
+                await tx.producto.update({
+                    where: { id: parseInt(item.productoId) },
+                    data: {
+                        stock: { decrement: parseInt(item.cantidad) }
+                    }
                 });
 
-                if (producto?.controlarStock) {
-                    // Buscar inventario en el almacén de la sucursal
-                    const almacen = await tx.almacen.findFirst({
-                        where: { sucursalId: sucursalId || sesion.caja.sucursalId }
+                // Actualizar inventario en almacén si existe
+                if (almacen) {
+                    await tx.inventario.updateMany({
+                        where: {
+                            productoId: parseInt(item.productoId),
+                            almacenId: almacen.id
+                        },
+                        data: {
+                            cantidad: { decrement: parseInt(item.cantidad) }
+                        }
                     });
 
-                    if (almacen) {
-                        await tx.inventario.updateMany({
-                            where: {
-                                productoId: parseInt(item.productoId),
-                                almacenId: almacen.id
-                            },
-                            data: {
-                                cantidad: { decrement: parseInt(item.cantidad) }
-                            }
-                        });
-                    }
+                    // Registrar movimiento de inventario (SALIDA por venta)
+                    await tx.movimientoInventario.create({
+                        data: {
+                            producto: { connect: { id: parseInt(item.productoId) } },
+                            almacen: { connect: { id: almacen.id } },
+                            tipo: 'SALIDA',
+                            cantidad: parseInt(item.cantidad),
+                            motivo: `Venta ${numDoc}`,
+                            usuario: { connect: { id: parseInt(usuarioId) } }
+                        }
+                    });
                 }
+            }
+
+            // Registrar movimiento de caja (ingreso de efectivo)
+            if (metodoPago === 'efectivo' || metodoPago === 'mixto') {
+                await tx.movimientoCaja.create({
+                    data: {
+                        sesionCaja: { connect: { id: sesionActiva.id } },
+                        usuario: { connect: { id: parseInt(usuarioId) } },
+                        tipo: 'INGRESO',
+                        monto: parseFloat(total),
+                        motivo: `Venta ${numDoc}`
+                    }
+                });
             }
 
             return venta;
         });
 
-        // Obtener venta completa con detalles
+        // 5. Obtener venta completa con detalles
         const ventaCompleta = await prisma.venta.findUnique({
             where: { id: result.id },
             include: {
@@ -104,13 +163,21 @@ const createVenta = async (req, res) => {
         });
 
         res.status(201).json({
-            message: 'Venta registrada con éxito',
-            venta: ventaCompleta
+            message: 'Venta registrada exitosamente',
+            venta: {
+                id: ventaCompleta.id,
+                numeroDocumento: ventaCompleta.numeroDocumento,
+                tipoDocumento: ventaCompleta.tipoDocumento,
+                total: parseFloat(ventaCompleta.total),
+                fechaVenta: ventaCompleta.fecha,
+                items: ventaCompleta.detalles,
+                cliente: ventaCompleta.cliente
+            }
         });
 
     } catch (error) {
         console.error('Error en la transacción de venta:', error);
-        res.status(500).json({ error: 'Error al procesar la venta' });
+        res.status(500).json({ message: 'Error al procesar la venta' });
     }
 };
 
