@@ -136,7 +136,7 @@ const createVenta = async (req, res) => {
                 }
             }
 
-            // Registrar movimiento de caja (ingreso de efectivo)
+            // Registrar movimiento de caja (ingreso de efectivo) y actualizar saldo
             if (metodoPago === 'efectivo' || metodoPago === 'mixto') {
                 await tx.movimientoCaja.create({
                     data: {
@@ -145,6 +145,14 @@ const createVenta = async (req, res) => {
                         tipo: 'INGRESO',
                         monto: parseFloat(total),
                         motivo: `Venta ${numDoc}`
+                    }
+                });
+
+                // Actualizar saldo de la caja
+                await tx.caja.update({
+                    where: { id: parseInt(cajaId) },
+                    data: {
+                        saldoActual: { increment: parseFloat(total) }
                     }
                 });
             }
@@ -184,20 +192,35 @@ const createVenta = async (req, res) => {
 // Obtener ventas
 const getVentas = async (req, res) => {
     try {
-        const { page = 1, limit = 20, fecha, estado, usuarioId, sucursalId } = req.query;
+        const { page = 1, limit = 20, fecha, fechaInicio, fechaFin, estado, usuarioId, sucursalId } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
         const where = {
             ...(estado && { estado }),
             ...(usuarioId && { usuarioId: parseInt(usuarioId) }),
-            ...(sucursalId && { sucursalId: parseInt(sucursalId) }),
-            ...(fecha && {
-                fecha: {
-                    gte: new Date(fecha),
-                    lt: new Date(new Date(fecha).setDate(new Date(fecha).getDate() + 1))
-                }
-            })
+            ...(sucursalId && { sucursalId: parseInt(sucursalId) })
         };
+
+        // Filtro por fecha específica
+        if (fecha) {
+            where.fecha = {
+                gte: new Date(fecha),
+                lt: new Date(new Date(fecha).setDate(new Date(fecha).getDate() + 1))
+            };
+        }
+
+        // Filtro por rango de fechas (fechaInicio y fechaFin)
+        if (fechaInicio || fechaFin) {
+            where.fecha = where.fecha || {};
+            if (fechaInicio) {
+                where.fecha.gte = new Date(fechaInicio);
+            }
+            if (fechaFin) {
+                const endDate = new Date(fechaFin);
+                endDate.setDate(endDate.getDate() + 1);
+                where.fecha.lt = endDate;
+            }
+        }
 
         const [total, ventas] = await prisma.$transaction([
             prisma.venta.count({ where }),
@@ -214,13 +237,32 @@ const getVentas = async (req, res) => {
             })
         ]);
 
+        // Formatear respuesta con items estructurados
+        const data = ventas.map(venta => ({
+            id: venta.id,
+            fecha: venta.fecha,
+            total: parseFloat(venta.total),
+            clienteNombre: venta.cliente?.nombre || 'Cliente General',
+            metodoPago: 'Efectivo', // Campo no existe en el modelo actual
+            estado: venta.estado,
+            tipoDocumento: venta.tipoDocumento,
+            numeroDocumento: venta.numeroDocumento,
+            usuario: venta.usuario,
+            items: venta.detalles.map(detalle => ({
+                id: detalle.id,
+                productoId: detalle.productoId,
+                nombre: detalle.producto?.nombre || 'Producto',
+                cantidad: detalle.cantidad,
+                precioUnitario: parseFloat(detalle.precioUnitario),
+                subtotal: parseFloat(detalle.subtotal)
+            }))
+        }));
+
         res.json({
-            data: ventas,
-            meta: {
-                total,
-                totalPages: Math.ceil(total / parseInt(limit)),
-                currentPage: parseInt(page)
-            }
+            data,
+            totalPages: Math.ceil(total / parseInt(limit)),
+            currentPage: parseInt(page),
+            totalItems: total
         });
     } catch (error) {
         console.error(error);

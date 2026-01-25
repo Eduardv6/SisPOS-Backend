@@ -41,6 +41,9 @@ enum EstadoVenta {
 enum TipoMovimientoCaja {
   INGRESO
   RETIRO
+  VENTA
+  APERTURA
+  CIERRE
 }
 
 // 3. Modelos
@@ -61,13 +64,15 @@ model Sucursal {
 }
 
 model Caja {
-  id          Int        @id @default(autoincrement())
-  nombre      String     @db.VarChar(100)
-  sucursalId  Int        @map("sucursal_id")
-  estado      EstadoCaja @default(CERRADA)
-  codigo      String?    @db.VarChar(100)
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  id           Int        @id @default(autoincrement())
+  nombre       String     @db.VarChar(100)
+  sucursalId   Int        @map("sucursal_id")
+  estado       EstadoCaja @default(CERRADA)
+  codigo       String?    @db.VarChar(100)
+  saldoInicial Decimal    @default(0.00) @map("saldo_inicial") @db.Decimal(10, 2)
+  saldoActual  Decimal    @default(0.00) @map("saldo_actual") @db.Decimal(10, 2)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
   sucursal    Sucursal      @relation(fields: [sucursalId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   sesiones    SesionCaja[]

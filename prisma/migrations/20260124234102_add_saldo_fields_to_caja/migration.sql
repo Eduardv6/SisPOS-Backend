@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `cajas` ADD COLUMN `saldo_actual` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    ADD COLUMN `saldo_inicial` DECIMAL(10, 2) NOT NULL DEFAULT 0.00;

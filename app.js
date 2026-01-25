@@ -2,6 +2,7 @@ import express from 'express';
 import authRoutes from './src/routes/authRoutes.js';
 import categoriaRoutes from './src/routes/categoriaRoutes.js';
 import sucursalRoutes from './src/routes/sucursalRoutes.js';
+import movimientoCajaRoutes from './src/routes/movimientoCajaRoutes.js';
 import cajaRoutes from './src/routes/cajaRoutes.js';
 import usuarioRoutes from './src/routes/usuarioRoutes.js';
 import productoRoutes from './src/routes/productoRoutes.js';
@@ -11,6 +12,7 @@ import almacenRoutes from './src/routes/almacenRoutes.js';
 import inventarioRoutes from './src/routes/inventarioRoutes.js';
 import sesionCajaRoutes from './src/routes/sesionCajaRoutes.js';
 import ventaRoutes from './src/routes/ventaRoutes.js';
+import dashboardRoutes from './src/routes/dashboardRoutes.js';
 
 // Configuraciones de express
 const app = express();
@@ -22,6 +24,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/sucursales', sucursalRoutes);
+app.use('/api/movimientos-caja', movimientoCajaRoutes);
 app.use('/api/cajas', cajaRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/productos', productoRoutes);
@@ -31,6 +34,7 @@ app.use('/api/almacenes', almacenRoutes);
 app.use('/api/inventarios', inventarioRoutes);
 app.use('/api/sesion-caja', sesionCajaRoutes);
 app.use('/api/ventas', ventaRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Ruta de health check
 app.get('/api/health', (req, res) => {

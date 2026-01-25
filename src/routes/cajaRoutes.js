@@ -9,7 +9,10 @@ router.post('/', verifyToken, isAdmin, cajaController.createCaja);
 router.put('/:id', verifyToken, isAdmin, cajaController.updateCaja);
 router.delete('/:id', verifyToken, isAdmin, cajaController.deleteCaja);
 
-// Aperturar caja
+// Operaciones de caja
 router.post('/:id/abrir', verifyToken, cajaController.abrirCaja);
+router.post('/:id/cerrar', verifyToken, cajaController.cerrarCajaEndpoint);
+router.post('/:id/ingreso', verifyToken, cajaController.registrarIngreso);
+router.post('/:id/retiro', verifyToken, cajaController.registrarRetiro);
 
 export default router;
