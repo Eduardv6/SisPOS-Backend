@@ -102,27 +102,48 @@ const getInventarioByAlmacen = async (req, res) => {
 // Agregar/Actualizar stock
 const updateStock = async (req, res) => {
     const { productoId, almacenId, cantidad, ubicacionFisica } = req.body;
+    console.log('\n🔄 UPDATE STOCK LLAMADO:');
+    console.log('   productoId:', productoId);
+    console.log('   almacenId:', almacenId);
+    console.log('   cantidad:', cantidad);
     try {
-        const inventario = await prisma.inventario.upsert({
-            where: {
-                unique_stock: {
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Actualizar inventario por almacén
+            const inventario = await tx.inventario.upsert({
+                where: {
+                    unique_stock: {
+                        productoId: parseInt(productoId),
+                        almacenId: parseInt(almacenId)
+                    }
+                },
+                update: {
+                    cantidad: parseFloat(cantidad),
+                    ubicacionFisica
+                },
+                create: {
                     productoId: parseInt(productoId),
-                    almacenId: parseInt(almacenId)
-                }
-            },
-            update: {
-                cantidad: parseFloat(cantidad),
-                ubicacionFisica
-            },
-            create: {
-                productoId: parseInt(productoId),
-                almacenId: parseInt(almacenId),
-                cantidad: parseFloat(cantidad),
-                ubicacionFisica
-            },
-            include: { producto: true, almacen: true }
+                    almacenId: parseInt(almacenId),
+                    cantidad: parseFloat(cantidad),
+                    ubicacionFisica
+                },
+                include: { producto: true, almacen: true }
+            });
+
+            // 2. Recalcular y actualizar stock total del producto
+            const totalStock = await tx.inventario.aggregate({
+                where: { productoId: parseInt(productoId) },
+                _sum: { cantidad: true }
+            });
+
+            await tx.producto.update({
+                where: { id: parseInt(productoId) },
+                data: { stock: totalStock._sum.cantidad || 0 }
+            });
+
+            return inventario;
         });
-        res.json(inventario);
+
+        res.json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error actualizando stock' });
@@ -132,20 +153,41 @@ const updateStock = async (req, res) => {
 // Ajustar stock (incrementar/decrementar)
 const ajustarStock = async (req, res) => {
     const { productoId, almacenId, ajuste } = req.body; // ajuste puede ser positivo o negativo
+    console.log('\n⚡ AJUSTAR STOCK LLAMADO:');
+    console.log('   productoId:', productoId);
+    console.log('   almacenId:', almacenId);
+    console.log('   ajuste:', ajuste);
     try {
-        const inventario = await prisma.inventario.update({
-            where: {
-                unique_stock: {
-                    productoId: parseInt(productoId),
-                    almacenId: parseInt(almacenId)
-                }
-            },
-            data: {
-                cantidad: { increment: parseFloat(ajuste) }
-            },
-            include: { producto: true, almacen: true }
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Actualizar inventario por almacén
+            const inventario = await tx.inventario.update({
+                where: {
+                    unique_stock: {
+                        productoId: parseInt(productoId),
+                        almacenId: parseInt(almacenId)
+                    }
+                },
+                data: {
+                    cantidad: { increment: parseFloat(ajuste) }
+                },
+                include: { producto: true, almacen: true }
+            });
+
+            // 2. Recalcular y actualizar stock total del producto
+            const totalStock = await tx.inventario.aggregate({
+                where: { productoId: parseInt(productoId) },
+                _sum: { cantidad: true }
+            });
+
+            await tx.producto.update({
+                where: { id: parseInt(productoId) },
+                data: { stock: totalStock._sum.cantidad || 0 }
+            });
+
+            return inventario;
         });
-        res.json(inventario);
+
+        res.json(result);
     } catch (error) {
         console.error(error);
         if (error.code === 'P2025') {

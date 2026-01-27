@@ -10,8 +10,8 @@ async function main() {
     where: { id: 1 },
     update: {},
     create: {
-      nombre: 'Zapatería Central',
-      direccion: 'Av. Principal #456, Centro Comercial'
+      nombre: 'Zapatería Telléz',
+      direccion: 'Av. Santos Dumont 8vo anillo'
     }
   });
   console.log('🏢 Sucursal creada:', sucursal.nombre);
@@ -23,7 +23,7 @@ async function main() {
     create: {
       nombre: 'Almacén Principal',
       sucursalId: sucursal.id,
-      ubicacion: 'Bodega trasera'
+      ubicacion: 'Santos Dumont 8vo anillo'
     }
   });
   console.log('📦 Almacén creado:', almacen.nombre);
@@ -81,10 +81,7 @@ async function main() {
     { nombre: 'Casual Mujer' },
     { nombre: 'Formal Hombre' },
     { nombre: 'Formal Mujer' },
-    { nombre: 'Sandalias' },
-    { nombre: 'Botas' },
-    { nombre: 'Niños' },
-    { nombre: 'Accesorios' }
+    { nombre: 'Sneaker' }
   ];
 
   for (let i = 0; i < categorias.length; i++) {
@@ -99,51 +96,39 @@ async function main() {
   // 6. Crear Productos de Zapatería con Sucursal y Almacén
   const productos = [
     // Deportivos
-    { nombre: 'Nike Air Max 270', categoriaId: 1, talla: '38, 39, 40, 41, 42, 43', color: 'Negro, Blanco, Rojo', precioCompra: 450, precioVenta: 699, codigoBarras: 'NIK-AM270-001' },
-    { nombre: 'Adidas Ultraboost 22', categoriaId: 1, talla: '38, 39, 40, 41, 42, 43, 44', color: 'Negro, Gris, Azul', precioCompra: 520, precioVenta: 799, codigoBarras: 'ADI-UB22-001' },
-    { nombre: 'Puma RS-X', categoriaId: 1, talla: '39, 40, 41, 42, 43', color: 'Blanco, Negro', precioCompra: 320, precioVenta: 499, codigoBarras: 'PUM-RSX-001' },
-    { nombre: 'New Balance 574', categoriaId: 1, talla: '38, 39, 40, 41, 42, 43', color: 'Gris, Azul, Verde', precioCompra: 380, precioVenta: 599, codigoBarras: 'NB-574-001' },
+    { nombre: 'Nike Air Max 270', categoriaId: 1, talla: '38', color: 'Amarillo', precioCompra: 450, precioVenta: 699, codigoBarras: 'NIK-AM270-001' },
+    { nombre: 'Adidas Ultraboost 22', categoriaId: 1, talla: '41', color: 'Naranja', precioCompra: 520, precioVenta: 799, codigoBarras: 'ADI-UB22-001' },
+    { nombre: 'Puma RS-X', categoriaId: 1, talla: '43', color: 'Blanco', precioCompra: 320, precioVenta: 499, codigoBarras: 'PUM-RSX-001' },
+    { nombre: 'New Balance 574', categoriaId: 1, talla: '42', color: 'Verde', precioCompra: 380, precioVenta: 599, codigoBarras: 'NB-574-001' },
     
     // Casual Hombre
-    { nombre: 'Mocasín Cuero Negro', categoriaId: 2, talla: '39, 40, 41, 42, 43, 44', color: 'Negro, Marrón', precioCompra: 180, precioVenta: 299, codigoBarras: 'MOC-CN-001' },
-    { nombre: 'Zapatilla Canvas Blanca', categoriaId: 2, talla: '38, 39, 40, 41, 42, 43', color: 'Blanco, Negro, Azul', precioCompra: 120, precioVenta: 199, codigoBarras: 'CNV-BL-001' },
-    { nombre: 'Slip-On Casual', categoriaId: 2, talla: '39, 40, 41, 42, 43', color: 'Negro, Gris, Beige', precioCompra: 150, precioVenta: 249, codigoBarras: 'SLP-CS-001' },
+    { nombre: 'Mocasín Cuero Negro', categoriaId: 2, talla: '40', color: 'Negro', precioCompra: 180, precioVenta: 299, codigoBarras: 'MOC-CN-001' },
+    { nombre: 'Zapatilla Canvas Blanca', categoriaId: 2, talla: '43', color: 'Azul', precioCompra: 120, precioVenta: 199, codigoBarras: 'CNV-BL-001' },
+    { nombre: 'Slip-On Casual', categoriaId: 2, talla: '41', color: 'Gris', precioCompra: 150, precioVenta: 249, codigoBarras: 'SLP-CS-001' },
     
     // Casual Mujer
-    { nombre: 'Ballerina Rosa', categoriaId: 3, talla: '35, 36, 37, 38, 39, 40', color: 'Rosa, Negro, Nude', precioCompra: 100, precioVenta: 179, codigoBarras: 'BAL-RS-001' },
-    { nombre: 'Sneaker Plataforma Blanco', categoriaId: 3, talla: '35, 36, 37, 38, 39, 40', color: 'Blanco, Rosa, Negro', precioCompra: 200, precioVenta: 329, codigoBarras: 'SNK-PL-001' },
-    { nombre: 'Loafer Beige', categoriaId: 3, talla: '35, 36, 37, 38, 39', color: 'Beige, Negro, Blanco', precioCompra: 160, precioVenta: 269, codigoBarras: 'LOA-BG-001' },
+    { nombre: 'Ballerina Rosa', categoriaId: 3, talla: '36', color: 'Morado', precioCompra: 100, precioVenta: 179, codigoBarras: 'BAL-RS-001' },
+    { nombre: 'Sneaker Plataforma Blanco', categoriaId: 3, talla: '37', color: 'Rosa', precioCompra: 200, precioVenta: 329, codigoBarras: 'SNK-PL-001' },
+    { nombre: 'Loafer Beige', categoriaId: 3, talla: '38', color: 'Beige', precioCompra: 160, precioVenta: 269, codigoBarras: 'LOA-BG-001' },
     
     // Formal Hombre
-    { nombre: 'Oxford Negro Cuero', categoriaId: 4, talla: '39, 40, 41, 42, 43, 44', color: 'Negro, Marrón', precioCompra: 280, precioVenta: 449, codigoBarras: 'OXF-NG-001' },
-    { nombre: 'Derby Marrón', categoriaId: 4, talla: '39, 40, 41, 42, 43, 44', color: 'Marrón, Negro', precioCompra: 260, precioVenta: 399, codigoBarras: 'DRB-MR-001' },
-    { nombre: 'Monk Strap Negro', categoriaId: 4, talla: '40, 41, 42, 43, 44', color: 'Negro, Café', precioCompra: 300, precioVenta: 479, codigoBarras: 'MNK-NG-001' },
+    { nombre: 'Oxford Negro Cuero', categoriaId: 4, talla: '42', color: 'Negro', precioCompra: 280, precioVenta: 449, codigoBarras: 'OXF-NG-001' },
+    { nombre: 'Derby Marrón', categoriaId: 4, talla: '44', color: 'Marrón', precioCompra: 260, precioVenta: 399, codigoBarras: 'DRB-MR-001' },
+    { nombre: 'Monk Strap Negro', categoriaId: 4, talla: '43', color: 'Negro', precioCompra: 300, precioVenta: 479, codigoBarras: 'MNK-NG-001' },
     
     // Formal Mujer
-    { nombre: 'Tacón Stiletto Negro 10cm', categoriaId: 5, talla: '35, 36, 37, 38, 39', color: 'Negro, Rojo, Nude', precioCompra: 220, precioVenta: 359, codigoBarras: 'STL-NG-001' },
-    { nombre: 'Tacón Block Nude', categoriaId: 5, talla: '35, 36, 37, 38, 39, 40', color: 'Nude, Negro, Blanco', precioCompra: 180, precioVenta: 299, codigoBarras: 'TBL-ND-001' },
-    { nombre: 'Pump Clásico Rojo', categoriaId: 5, talla: '35, 36, 37, 38, 39', color: 'Rojo, Negro, Azul', precioCompra: 200, precioVenta: 329, codigoBarras: 'PMP-RJ-001' },
+    { nombre: 'Tacón Stiletto Negro 10cm', categoriaId: 5, talla: '35', color: 'Negro', precioCompra: 220, precioVenta: 359, codigoBarras: 'STL-NG-001' },
+    { nombre: 'Tacón Block Nude', categoriaId: 5, talla: '37', color: 'Blanco', precioCompra: 180, precioVenta: 299, codigoBarras: 'TBL-ND-001' },
+    { nombre: 'Pump Clásico Rojo', categoriaId: 5, talla: '36', color: 'Rojo', precioCompra: 200, precioVenta: 329, codigoBarras: 'PMP-RJ-001' },
     
-    // Sandalias
-    { nombre: 'Sandalia Playa Hombre', categoriaId: 6, talla: '40, 41, 42, 43, 44', color: 'Negro, Azul, Marrón', precioCompra: 60, precioVenta: 99, codigoBarras: 'SND-PLH-001' },
-    { nombre: 'Sandalia Tiras Mujer', categoriaId: 6, talla: '35, 36, 37, 38, 39', color: 'Dorado, Plateado, Negro', precioCompra: 80, precioVenta: 139, codigoBarras: 'SND-TRM-001' },
-    { nombre: 'Chancla Deportiva', categoriaId: 6, talla: '38, 39, 40, 41, 42, 43', color: 'Negro, Blanco, Azul', precioCompra: 45, precioVenta: 79, codigoBarras: 'CHN-DP-001' },
-    
-    // Botas
-    { nombre: 'Bota Chelsea Negra', categoriaId: 7, talla: '39, 40, 41, 42, 43, 44', color: 'Negro, Marrón', precioCompra: 350, precioVenta: 549, codigoBarras: 'BOT-CHL-001' },
-    { nombre: 'Botín Tacón Mujer', categoriaId: 7, talla: '35, 36, 37, 38, 39', color: 'Negro, Café, Beige', precioCompra: 280, precioVenta: 449, codigoBarras: 'BTN-TCM-001' },
-    { nombre: 'Bota Montaña Impermeable', categoriaId: 7, talla: '39, 40, 41, 42, 43, 44, 45', color: 'Marrón, Negro, Verde', precioCompra: 400, precioVenta: 629, codigoBarras: 'BOT-MTN-001' },
-    
-    // Niños
-    { nombre: 'Tenis Velcro Niño', categoriaId: 8, talla: '28, 29, 30, 31, 32, 33, 34', color: 'Azul, Rojo, Negro', precioCompra: 80, precioVenta: 139, codigoBarras: 'TNS-VN-001' },
-    { nombre: 'Zapatilla Luz LED Niña', categoriaId: 8, talla: '25, 26, 27, 28, 29, 30', color: 'Rosa, Morado, Blanco', precioCompra: 100, precioVenta: 169, codigoBarras: 'ZAP-LED-001' },
-    { nombre: 'Sandalia Niño Verano', categoriaId: 8, talla: '24, 25, 26, 27, 28, 29, 30', color: 'Azul, Verde, Rojo', precioCompra: 50, precioVenta: 89, codigoBarras: 'SND-NV-001' },
-    
-    // Accesorios
-    { nombre: 'Plantillas Gel Comfort', categoriaId: 9, talla: 'S, M, L, XL', color: null, precioCompra: 25, precioVenta: 49, codigoBarras: 'PLT-GEL-001' },
-    { nombre: 'Cordones Premium 120cm', categoriaId: 9, talla: null, color: 'Negro, Blanco, Café', precioCompra: 8, precioVenta: 19, codigoBarras: 'CRD-120-001' },
-    { nombre: 'Crema Cuero Negro', categoriaId: 9, talla: null, color: 'Negro', precioCompra: 15, precioVenta: 35, codigoBarras: 'CRM-CN-001' },
-    { nombre: 'Spray Impermeabilizante', categoriaId: 9, talla: null, color: null, precioCompra: 35, precioVenta: 69, codigoBarras: 'SPR-IMP-001' }
+    // Sneaker
+    { nombre: 'Nike Air Force 1', categoriaId: 6, talla: '40', color: 'Blanco', precioCompra: 350, precioVenta: 490, codigoBarras: 'NIK-WHT-001' },
+    { nombre: 'Adidas Stan Smith', categoriaId: 6, talla: '42', color: 'Negro', precioCompra: 450, precioVenta: 619, codigoBarras: 'ADI-BLK-001' },
+    { nombre: 'Nike Air Jordan 1', categoriaId: 6, talla: '41', color: 'Verde', precioCompra: 215, precioVenta: 350, codigoBarras: 'NIK-JGN-001' },
+    { nombre: 'Adidas Yeezy Boost 350', categoriaId: 6, talla: '44', color: 'Beige', precioCompra: 355, precioVenta: 469, codigoBarras: 'ADI-BEG-001' },
+    { nombre: 'New Balance 550', categoriaId: 6, talla: '40', color: 'Gris', precioCompra: 315, precioVenta: 445, codigoBarras: 'NEW-GRY-001' },
+    { nombre: 'Nike SB Panda', categoriaId: 6, talla: '42', color: 'Negro', precioCompra: 355, precioVenta: 455, codigoBarras: 'NIK-SBL-001' },
+    { nombre: 'Pumas Caven BMW ', categoriaId: 6, talla: '40', color: 'Blanco', precioCompra: 265, precioVenta: 305, codigoBarras: 'PUM-CWH-001' }
   ];
 
   for (const prod of productos) {
@@ -172,8 +157,7 @@ async function main() {
       create: {
         productoId: producto.id,
         almacenId: almacen.id,
-        cantidad: stockInicial,
-        ubicacionFisica: `Pasillo ${String.fromCharCode(65 + (producto.id % 5))}-${String(producto.id).padStart(2, '0')}`
+        cantidad: stockInicial
       }
     });
 
@@ -189,14 +173,13 @@ async function main() {
       }
     });
   }
-  console.log('👟 Productos de zapatería creados:', productos.length);
 
   // 7. Crear Proveedores
   const proveedores = [
-    { nombre: 'Nike Bolivia', direccion: 'Zona Sur, La Paz', celular: '71234567', contacto: 'Carlos Mendez' },
+    { nombre: 'Sporting BR', direccion: 'Zona Sur, La Paz', celular: '71234567', contacto: 'Carlos Mendez' },
     { nombre: 'Adidas Distribuidora', direccion: 'Av. América, Cochabamba', celular: '72345678', contacto: 'Ana Rojas' },
     { nombre: 'Importadora Calzados SA', direccion: 'Zona Industrial, Santa Cruz', celular: '73456789', contacto: 'Pedro Gutierrez' },
-    { nombre: 'Cueros y Pieles LTDA', direccion: 'Calle Comercio, Oruro', celular: '74567890', contacto: 'María López' }
+    { nombre: 'Manaco', direccion: 'Calle Comercio, Oruro', celular: '74567890', contacto: 'María López' }
   ];
 
   for (const prov of proveedores) {
@@ -206,7 +189,6 @@ async function main() {
       create: prov
     });
   }
-  console.log('🚚 Proveedores creados:', proveedores.length);
 
   // 8. Crear Clientes frecuentes
   const clientes = [
@@ -222,12 +204,7 @@ async function main() {
       create: cli
     });
   }
-  console.log('👥 Clientes creados:', clientes.length);
-
   console.log('\n✅ Base de datos de Zapatería poblada con éxito.');
-  console.log('\n📋 Credenciales de acceso:');
-  console.log('   👔 Admin:  admin@zapateria.com / Admin123');
-  console.log('   👤 Cajero: cajero@zapateria.com / Cajero123');
 }
 
 main()

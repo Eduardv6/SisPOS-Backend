@@ -140,6 +140,7 @@ model Producto {
   codigoInterno   String?  @map("codigo_interno") @db.VarChar(100)
   stock           Int      @default(0)
   stockMinimo     Int      @default(0) @map("stock_minimo")
+  imagen          String?  @db.VarChar(255) // URL de la imagen del producto
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

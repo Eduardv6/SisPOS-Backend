@@ -22,32 +22,48 @@ const getInventarioByAlmacen = async (req, res) => {
 // Agregar/Actualizar stock (Setear valor absoluto)
 const updateStock = async (req, res) => {
     const { productoId, almacenId, cantidad, ubicacionFisica } = req.body;
+    console.log('\n🔄 [inventarioController] UPDATE STOCK LLAMADO:');
+    console.log('   productoId:', productoId);
+    console.log('   almacenId:', almacenId);
+    console.log('   cantidad:', cantidad);
     try {
-        const inventario = await prisma.inventario.upsert({
-            where: {
-                unique_stock: {
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Actualizar inventario por almacén
+            const inventario = await tx.inventario.upsert({
+                where: {
+                    unique_stock: {
+                        productoId: parseInt(productoId),
+                        almacenId: parseInt(almacenId)
+                    }
+                },
+                update: {
+                    cantidad: parseFloat(cantidad),
+                    ubicacionFisica
+                },
+                create: {
                     productoId: parseInt(productoId),
-                    almacenId: parseInt(almacenId)
-                }
-            },
-            update: {
-                cantidad: parseFloat(cantidad),
-                ubicacionFisica
-            },
-            create: {
-                productoId: parseInt(productoId),
-                almacenId: parseInt(almacenId),
-                cantidad: parseFloat(cantidad),
-                ubicacionFisica
-            },
-            include: { producto: true, almacen: true }
-        });
-        
-        // También actualizar el stock total en la tabla Producto si es la misma relación
-        // (Opcional: dependerá de si quieres mantener sincronizado el producto.stock con la suma de inventarios)
-        // Por ahora mantenemos la lógica simple de inventario por almacén.
+                    almacenId: parseInt(almacenId),
+                    cantidad: parseFloat(cantidad),
+                    ubicacionFisica
+                },
+                include: { producto: true, almacen: true }
+            });
 
-        res.json(inventario);
+            // 2. Recalcular y actualizar stock total del producto
+            const totalStock = await tx.inventario.aggregate({
+                where: { productoId: parseInt(productoId) },
+                _sum: { cantidad: true }
+            });
+
+            await tx.producto.update({
+                where: { id: parseInt(productoId) },
+                data: { stock: totalStock._sum.cantidad || 0 }
+            });
+
+            return inventario;
+        });
+
+        res.json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error actualizando stock' });
@@ -57,6 +73,10 @@ const updateStock = async (req, res) => {
 // Ajustar stock (incrementar/decrementar relativo)
 const ajustarStock = async (req, res) => {
     const { productoId, almacenId, ajuste, motivo, usuarioId } = req.body; 
+    console.log('\n⚡ [inventarioController] AJUSTAR STOCK LLAMADO:');
+    console.log('   productoId:', productoId);
+    console.log('   almacenId:', almacenId);
+    console.log('   ajuste:', ajuste);
     
     try {
         const result = await prisma.$transaction(async (tx) => {
@@ -79,13 +99,6 @@ const ajustarStock = async (req, res) => {
                 }
             });
 
-            // 2. Actualizar stock total del producto
-            await tx.producto.update({
-                where: { id: parseInt(productoId) },
-                data: {
-                    stock: { increment: parseFloat(ajuste) }
-                }
-            });
 
             // 3. Registrar movimiento en Kardex
             await tx.movimientoInventario.create({
@@ -97,6 +110,17 @@ const ajustarStock = async (req, res) => {
                     motivo: motivo || 'Ajuste manual de inventario',
                     usuarioId: usuarioId ? parseInt(usuarioId) : null
                 }
+            });
+
+            // 4. Recalcular y actualizar stock total del producto
+            const totalStock = await tx.inventario.aggregate({
+                where: { productoId: parseInt(productoId) },
+                _sum: { cantidad: true }
+            });
+
+            await tx.producto.update({
+                where: { id: parseInt(productoId) },
+                data: { stock: totalStock._sum.cantidad || 0 }
             });
 
             return inventario;
@@ -179,10 +203,190 @@ const getStockByProducto = async (req, res) => {
     }
 };
 
+// Transferir stock entre almacenes (busca producto equivalente en destino)
+const transferirStock = async (req, res) => {
+    const { productoOrigenId, almacenOrigenId, almacenDestinoId, cantidad, usuarioId } = req.body;
+    
+    console.log('\n🔄 TRANSFERENCIA INICIADA:');
+    console.log('   productoOrigenId:', productoOrigenId);
+    console.log('   almacenOrigenId:', almacenOrigenId);
+    console.log('   almacenDestinoId:', almacenDestinoId);
+    console.log('   cantidad:', cantidad);
+    
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Obtener el producto origen con sus datos
+            const productoOrigen = await tx.producto.findUnique({
+                where: { id: parseInt(productoOrigenId) },
+                include: { inventarios: true }
+            });
+            
+            if (!productoOrigen) {
+                throw new Error('Producto origen no encontrado');
+            }
+            
+            console.log('   Producto origen:', productoOrigen.nombre, '- Talla:', productoOrigen.talla, '- Color:', productoOrigen.color);
+            
+            // 2. Verificar que hay suficiente stock en el almacén origen
+            const inventarioOrigen = await tx.inventario.findUnique({
+                where: {
+                    unique_stock: {
+                        productoId: parseInt(productoOrigenId),
+                        almacenId: parseInt(almacenOrigenId)
+                    }
+                }
+            });
+            
+            if (!inventarioOrigen || parseFloat(inventarioOrigen.cantidad) < parseInt(cantidad)) {
+                throw new Error(`Stock insuficiente en almacén origen. Disponible: ${inventarioOrigen?.cantidad || 0}`);
+            }
+            
+            // 3. Buscar producto equivalente en el almacén destino (mismo nombre, talla, color)
+            let productoDestino = await tx.producto.findFirst({
+                where: {
+                    nombre: productoOrigen.nombre,
+                    talla: productoOrigen.talla,
+                    color: productoOrigen.color,
+                    almacenId: parseInt(almacenDestinoId)
+                }
+            });
+            
+            console.log('   Producto destino encontrado:', productoDestino ? `ID ${productoDestino.id}` : 'NO - Se creará uno nuevo');
+            
+            // 4. Si no existe producto en destino, crearlo
+            if (!productoDestino) {
+                // Obtener el almacén destino para saber su sucursalId
+                const almacenDestino = await tx.almacen.findUnique({
+                    where: { id: parseInt(almacenDestinoId) }
+                });
+                
+                if (!almacenDestino) {
+                    throw new Error('Almacén destino no encontrado');
+                }
+                
+                productoDestino = await tx.producto.create({
+                    data: {
+                        nombre: productoOrigen.nombre,
+                        categoriaId: productoOrigen.categoriaId,
+                        sucursalId: almacenDestino.sucursalId,
+                        almacenId: parseInt(almacenDestinoId),
+                        talla: productoOrigen.talla,
+                        color: productoOrigen.color,
+                        precioCompra: productoOrigen.precioCompra,
+                        precioVenta: productoOrigen.precioVenta,
+                        codigoBarras: null, // No duplicar código de barras
+                        codigoInterno: productoOrigen.codigoInterno,
+                        stock: 0,
+                        stockMinimo: productoOrigen.stockMinimo
+                    }
+                });
+                
+                console.log('   Producto creado en destino con ID:', productoDestino.id);
+            }
+            
+            // 5. Restar del inventario origen
+            const inventarioOrigenActualizado = await tx.inventario.update({
+                where: {
+                    unique_stock: {
+                        productoId: parseInt(productoOrigenId),
+                        almacenId: parseInt(almacenOrigenId)
+                    }
+                },
+                data: {
+                    cantidad: { decrement: parseInt(cantidad) }
+                }
+            });
+            
+            // 6. Sumar al inventario destino (upsert por si no existe)
+            const inventarioDestinoActualizado = await tx.inventario.upsert({
+                where: {
+                    unique_stock: {
+                        productoId: productoDestino.id,
+                        almacenId: parseInt(almacenDestinoId)
+                    }
+                },
+                update: {
+                    cantidad: { increment: parseInt(cantidad) }
+                },
+                create: {
+                    productoId: productoDestino.id,
+                    almacenId: parseInt(almacenDestinoId),
+                    cantidad: parseInt(cantidad),
+                    ubicacionFisica: 'N/A'
+                }
+            });
+            
+            // 7. Registrar movimiento de SALIDA en origen
+            await tx.movimientoInventario.create({
+                data: {
+                    productoId: parseInt(productoOrigenId),
+                    almacenId: parseInt(almacenOrigenId),
+                    tipo: 'SALIDA',
+                    cantidad: parseInt(cantidad),
+                    motivo: `Transferencia a almacén ID ${almacenDestinoId}`,
+                    usuarioId: usuarioId ? parseInt(usuarioId) : null
+                }
+            });
+            
+            // 8. Registrar movimiento de ENTRADA en destino
+            await tx.movimientoInventario.create({
+                data: {
+                    productoId: productoDestino.id,
+                    almacenId: parseInt(almacenDestinoId),
+                    tipo: 'ENTRADA',
+                    cantidad: parseInt(cantidad),
+                    motivo: `Transferencia desde almacén ID ${almacenOrigenId}`,
+                    usuarioId: usuarioId ? parseInt(usuarioId) : null
+                }
+            });
+            
+            // 9. Recalcular y actualizar stock total del producto ORIGEN
+            const totalStockOrigen = await tx.inventario.aggregate({
+                where: { productoId: parseInt(productoOrigenId) },
+                _sum: { cantidad: true }
+            });
+            
+            await tx.producto.update({
+                where: { id: parseInt(productoOrigenId) },
+                data: { stock: totalStockOrigen._sum.cantidad || 0 }
+            });
+            
+            // 10. Recalcular y actualizar stock total del producto DESTINO
+            const totalStockDestino = await tx.inventario.aggregate({
+                where: { productoId: productoDestino.id },
+                _sum: { cantidad: true }
+            });
+            
+            await tx.producto.update({
+                where: { id: productoDestino.id },
+                data: { stock: totalStockDestino._sum.cantidad || 0 }
+            });
+            
+            console.log('✅ TRANSFERENCIA COMPLETADA:');
+            console.log('   Stock origen actualizado:', totalStockOrigen._sum.cantidad);
+            console.log('   Stock destino actualizado:', totalStockDestino._sum.cantidad);
+            
+            return {
+                productoOrigenId: parseInt(productoOrigenId),
+                productoDestinoId: productoDestino.id,
+                cantidadTransferida: parseInt(cantidad),
+                stockOrigenNuevo: totalStockOrigen._sum.cantidad || 0,
+                stockDestinoNuevo: totalStockDestino._sum.cantidad || 0
+            };
+        });
+        
+        res.json(result);
+    } catch (error) {
+        console.error('❌ ERROR en transferencia:', error);
+        res.status(500).json({ error: error.message || 'Error en la transferencia' });
+    }
+};
+
 export {
     getInventarioByAlmacen,
     updateStock,
     ajustarStock,
     getStockByProducto,
-    getMovimientos
+    getMovimientos,
+    transferirStock
 };

@@ -18,4 +18,7 @@ router.patch('/ajuste', verifyToken, isSupervisorOrAdmin, inventarioController.a
 // Historial de movimientos (Kardex)
 router.get('/movimientos', verifyToken, inventarioController.getMovimientos);
 
+// Transferir stock entre almacenes (busca producto equivalente)
+router.post('/transferir', verifyToken, isSupervisorOrAdmin, inventarioController.transferirStock);
+
 export default router;

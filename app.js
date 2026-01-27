@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import authRoutes from './src/routes/authRoutes.js';
 import categoriaRoutes from './src/routes/categoriaRoutes.js';
 import sucursalRoutes from './src/routes/sucursalRoutes.js';
@@ -14,11 +16,29 @@ import sesionCajaRoutes from './src/routes/sesionCajaRoutes.js';
 import ventaRoutes from './src/routes/ventaRoutes.js';
 import dashboardRoutes from './src/routes/dashboardRoutes.js';
 
+// Obtener __dirname en ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Configuraciones de express
 const app = express();
 
 // Middleware para parsear JSON
 app.use(express.json());
+
+// Servir archivos estáticos (imágenes de productos)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Middleware para loguear todas las peticiones (DEBUG)
+app.use((req, res, next) => {
+  if (req.method !== 'GET') {
+    console.log('\n====================================');
+    console.log(`📥 ${req.method} ${req.originalUrl}`);
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('====================================\n');
+  }
+  next();
+});
 
 // Rutas
 app.use('/api/auth', authRoutes);

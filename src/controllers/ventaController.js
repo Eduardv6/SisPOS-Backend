@@ -102,13 +102,6 @@ const createVenta = async (req, res) => {
                     }
                 });
 
-                // Actualizar stock del producto
-                await tx.producto.update({
-                    where: { id: parseInt(item.productoId) },
-                    data: {
-                        stock: { decrement: parseInt(item.cantidad) }
-                    }
-                });
 
                 // Actualizar inventario en almacén si existe
                 if (almacen) {
