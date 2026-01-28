@@ -171,13 +171,23 @@ const registrarMovimiento = async (req, res) => {
 // Obtener movimientos de una sesión
 const getMovimientos = async (req, res) => {
     const { sesionId } = req.params;
+    const { tipo } = req.query; // 'ingreso' o 'retiro'
+    
     try {
+        const whereClause = { sesionCajaId: parseInt(sesionId) };
+        
+        // Filtrar por tipo si se proporciona
+        if (tipo) {
+            whereClause.tipo = tipo.toUpperCase(); // 'INGRESO' o 'RETIRO'
+        }
+        
         const movimientos = await prisma.movimientoCaja.findMany({
-            where: { sesionCajaId: parseInt(sesionId) },
+            where: whereClause,
             include: { usuario: { select: { id: true, nombres: true } } },
             orderBy: { fecha: 'desc' }
         });
-        res.json(movimientos);
+        
+        res.json({ data: movimientos });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error obteniendo movimientos' });
