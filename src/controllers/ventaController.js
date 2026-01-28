@@ -83,6 +83,7 @@ const createVenta = async (req, res) => {
                     ...(clienteId && { cliente: { connect: { id: parseInt(clienteId) } } }),
                     tipoDocumento: tipoDocumento || 'ticket',
                     numeroDocumento: numDoc,
+                    metodoPago: metodoPago || 'efectivo',
                     total: parseFloat(total),
                     estado: 'completada'
                 }
@@ -92,12 +93,18 @@ const createVenta = async (req, res) => {
             for (const item of items) {
                 const itemSubtotal = item.cantidad * parseFloat(item.precioUnitario);
 
+                // Buscar producto para obtener su precio de compra actual (costo histórico)
+                const productoInfo = await tx.producto.findUnique({
+                    where: { id: parseInt(item.productoId) }
+                });
+
                 await tx.detalleVenta.create({
                     data: {
                         venta: { connect: { id: venta.id } },
                         producto: { connect: { id: parseInt(item.productoId) } },
                         cantidad: parseInt(item.cantidad),
                         precioUnitario: parseFloat(item.precioUnitario),
+                        precioCompra: productoInfo ? parseFloat(productoInfo.precioCompra) : 0, // Guardar costo histórico
                         subtotal: itemSubtotal
                     }
                 });
@@ -135,7 +142,7 @@ const createVenta = async (req, res) => {
                     data: {
                         sesionCaja: { connect: { id: sesionActiva.id } },
                         usuario: { connect: { id: parseInt(usuarioId) } },
-                        tipo: 'INGRESO',
+                        tipo: 'VENTA',
                         monto: parseFloat(total),
                         motivo: `Venta ${numDoc}`
                     }
@@ -236,7 +243,7 @@ const getVentas = async (req, res) => {
             fecha: venta.fecha,
             total: parseFloat(venta.total),
             clienteNombre: venta.cliente?.nombre || 'Cliente General',
-            metodoPago: 'Efectivo', // Campo no existe en el modelo actual
+            metodoPago: venta.metodoPago,
             estado: venta.estado,
             tipoDocumento: venta.tipoDocumento,
             numeroDocumento: venta.numeroDocumento,
@@ -247,6 +254,7 @@ const getVentas = async (req, res) => {
                 nombre: detalle.producto?.nombre || 'Producto',
                 cantidad: detalle.cantidad,
                 precioUnitario: parseFloat(detalle.precioUnitario),
+                precioCompra: parseFloat(detalle.precioCompra), // Incluir costo histórico en respuesta si se necesita
                 subtotal: parseFloat(detalle.subtotal)
             }))
         }));

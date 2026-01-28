@@ -264,6 +264,7 @@ model Venta {
   sesionCajaId    Int           @map("sesion_caja_id")
   tipoDocumento   TipoDocumento @default(ticket) @map("tipo_documento")
   numeroDocumento String?       @map("numero_documento") @db.VarChar(50)
+  metodoPago      String        @default("efectivo") @map("metodo_pago") @db.VarChar(50)
   total           Decimal       @db.Decimal(10, 2)
   estado          EstadoVenta   @default(completada)
   createdAt       DateTime      @default(now()) @map("created_at")
@@ -282,6 +283,7 @@ model DetalleVenta {
   productoId     Int     @map("producto_id")
   cantidad       Int
   precioUnitario Decimal @map("precio_unitario") @db.Decimal(10, 2)
+  precioCompra   Decimal @default(0) @map("precio_compra") @db.Decimal(10, 2) // Costo histórico para reportes de utilidad
   subtotal       Decimal @db.Decimal(10, 2)
 
   venta    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
