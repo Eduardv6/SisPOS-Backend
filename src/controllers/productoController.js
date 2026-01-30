@@ -50,12 +50,27 @@ const getProductos = async (req, res) => {
         const { page = 1, limit = 10, search, categoriaId, sucursalId, almacenId } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
-        const where = {
+        let where = {
             ...(search && { nombre: { contains: search } }),
             ...(categoriaId && { categoriaId: parseInt(categoriaId) }),
-            ...(sucursalId && { sucursalId: parseInt(sucursalId) }),
             ...(almacenId && { almacenId: parseInt(almacenId) })
         };
+
+        // Lógica de permisos de sucursal
+        if (req.user.tipo === 'administrador') {
+            // Admin puede filtrar por sucursal si quiere
+            if (sucursalId) where.sucursalId = parseInt(sucursalId);
+        } else {
+            // Supervisor y Cajero SOLO ven su sucursal
+            if (!req.user.sucursalId) {
+                // Si no tiene sucursal asignada, retornar vacío
+                return res.json({
+                    data: [],
+                    meta: { total: 0, totalPages: 0, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
+                }); 
+            }
+            where.sucursalId = req.user.sucursalId;
+        }
 
         const [total, productos] = await prisma.$transaction([
             prisma.producto.count({ where }),
@@ -67,7 +82,7 @@ const getProductos = async (req, res) => {
                     categoria: true,
                     sucursal: true,
                     almacen: true,
-                    inventarios: true // Incluir inventarios para calcular stock
+                    inventarios: true
                 },
                 orderBy: { nombre: 'asc' }
             })
@@ -79,15 +94,6 @@ const getProductos = async (req, res) => {
                 return sum + parseFloat(inv.cantidad);
             }, 0);
             
-            // Log para depuración
-            console.log(`📦 Producto: ${producto.nombre} (ID: ${producto.id})`);
-            console.log(`   Inventarios: ${producto.inventarios.length}`);
-            producto.inventarios.forEach(inv => {
-                console.log(`   - Almacén ${inv.almacenId}: ${inv.cantidad} unidades`);
-            });
-            console.log(`   Stock Total Calculado: ${stockTotal}`);
-            
-            // Retornar producto con stock calculado
             const { inventarios, ...productoData } = producto;
             return {
                 ...productoData,
@@ -104,6 +110,7 @@ const getProductos = async (req, res) => {
                 itemsPerPage: parseInt(limit)
             }
         });
+
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error obteniendo productos' });

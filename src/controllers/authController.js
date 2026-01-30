@@ -9,7 +9,11 @@ const login = async (req, res) => {
   try {
     const usuario = await prisma.usuario.findUnique({
       where: { email },
-      include: { sucursal: true }
+      include: { 
+        sucursal: true,
+        permisos: true,
+        caja: true // Incluir caja asignada
+      }
     });
 
     if (!usuario || !usuario.estado) {
@@ -22,13 +26,18 @@ const login = async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
+    // Extraer nombres de permisos en un array simple
+    const permisosNombres = usuario.permisos.map(p => p.permiso);
+
     const token = jwt.sign(
       {
         id: usuario.id,
         tipo: usuario.tipo,
         email: usuario.email,
         nombres: usuario.nombres,
-        sucursalId: usuario.sucursalId
+        sucursalId: usuario.sucursalId,
+        cajaId: usuario.cajaId, // Incluir ID de caja asignada
+        permisos: permisosNombres // Incluir permisos en el token
       },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
@@ -42,7 +51,9 @@ const login = async (req, res) => {
         nombres: usuario.nombres,
         email: usuario.email,
         tipo: usuario.tipo,
-        sucursal: usuario.sucursal
+        sucursal: usuario.sucursal,
+        caja: usuario.caja,
+        permisos: permisosNombres
       }
     });
 

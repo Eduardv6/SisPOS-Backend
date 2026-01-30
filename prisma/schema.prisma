@@ -76,6 +76,7 @@ model Caja {
 
   sucursal    Sucursal      @relation(fields: [sucursalId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   sesiones    SesionCaja[]
+  usuariosAsignados Usuario[]
 
   @@map("cajas")
 }
@@ -94,6 +95,10 @@ model Usuario {
   updatedAt  DateTime    @updatedAt @map("updated_at")
 
   sucursal          Sucursal?          @relation(fields: [sucursalId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  // Nueva relación: Caja asignada al usuario (para cajeros)
+  cajaId            Int?               @map("caja_id")
+  caja              Caja?              @relation(fields: [cajaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  
   permisos          PermisoUsuario[]
   sesionesCaja      SesionCaja[]
   ventas            Venta[]

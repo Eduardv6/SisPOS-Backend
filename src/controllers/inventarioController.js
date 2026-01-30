@@ -5,6 +5,17 @@ const prisma = new PrismaClient();
 const getInventarioByAlmacen = async (req, res) => {
     const { almacenId } = req.params;
     try {
+        // Validación de permisos
+        if (req.user.tipo !== 'administrador' && req.user.sucursalId) {
+            const almacen = await prisma.almacen.findUnique({
+                where: { id: parseInt(almacenId) },
+                select: { sucursalId: true }
+            });
+            if (almacen && almacen.sucursalId !== req.user.sucursalId) {
+                return res.status(403).json({ error: 'No tienes permiso para ver este almacén' });
+            }
+        }
+
         const inventario = await prisma.inventario.findMany({
             where: { almacenId: parseInt(almacenId) },
             include: {
@@ -22,11 +33,19 @@ const getInventarioByAlmacen = async (req, res) => {
 // Agregar/Actualizar stock (Setear valor absoluto)
 const updateStock = async (req, res) => {
     const { productoId, almacenId, cantidad, ubicacionFisica } = req.body;
-    console.log('\n🔄 [inventarioController] UPDATE STOCK LLAMADO:');
-    console.log('   productoId:', productoId);
-    console.log('   almacenId:', almacenId);
-    console.log('   cantidad:', cantidad);
+    
     try {
+        // Validación de permisos
+        if (req.user.tipo !== 'administrador' && req.user.sucursalId) {
+            const almacen = await prisma.almacen.findUnique({
+                where: { id: parseInt(almacenId) },
+                select: { sucursalId: true }
+            });
+            if (!almacen || almacen.sucursalId !== req.user.sucursalId) {
+                return res.status(403).json({ error: 'No tienes permiso para modificar este almacén' });
+            }
+        }
+
         const result = await prisma.$transaction(async (tx) => {
             // 1. Actualizar inventario por almacén
             const inventario = await tx.inventario.upsert({
@@ -73,12 +92,19 @@ const updateStock = async (req, res) => {
 // Ajustar stock (incrementar/decrementar relativo)
 const ajustarStock = async (req, res) => {
     const { productoId, almacenId, ajuste, motivo, usuarioId } = req.body; 
-    console.log('\n⚡ [inventarioController] AJUSTAR STOCK LLAMADO:');
-    console.log('   productoId:', productoId);
-    console.log('   almacenId:', almacenId);
-    console.log('   ajuste:', ajuste);
     
     try {
+        // Validación de permisos
+        if (req.user.tipo !== 'administrador' && req.user.sucursalId) {
+            const almacen = await prisma.almacen.findUnique({
+                where: { id: parseInt(almacenId) },
+                select: { sucursalId: true }
+            });
+            if (!almacen || almacen.sucursalId !== req.user.sucursalId) {
+                return res.status(403).json({ error: 'No tienes permiso para modificar este almacén' });
+            }
+        }
+
         const result = await prisma.$transaction(async (tx) => {
             // 1. Actualizar inventario por almacén
             const inventario = await tx.inventario.upsert({
@@ -151,6 +177,16 @@ const getMovimientos = async (req, res) => {
             })
         };
 
+        // Filtro de sucursal
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                // Filtrar movimientos de almacenes de mi sucursal
+                where.almacen = {
+                    sucursalId: req.user.sucursalId
+                };
+            }
+        }
+
         const [total, movimientos] = await prisma.$transaction([
             prisma.movimientoInventario.count({ where }),
             prisma.movimientoInventario.findMany({
@@ -185,8 +221,20 @@ const getMovimientos = async (req, res) => {
 const getStockByProducto = async (req, res) => {
     const { productoId } = req.params;
     try {
+        let whereAlmacen = {}; 
+        
+        // Filtro de sucursal
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                whereAlmacen = { sucursalId: req.user.sucursalId };
+            }
+        }
+
         const stock = await prisma.inventario.findMany({
-            where: { productoId: parseInt(productoId) },
+            where: { 
+                productoId: parseInt(productoId),
+                almacen: whereAlmacen 
+            },
             include: { almacen: { include: { sucursal: true } } }
         });
 

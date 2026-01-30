@@ -2,10 +2,29 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 // Obtener todas las cajas
+// Obtener todas las cajas
 const getCajas = async (req, res) => {
     try {
         const { sucursalId } = req.query;
-        const where = sucursalId ? { sucursalId: parseInt(sucursalId) } : {};
+        let where = {};
+
+        // Si es Admin, puede ver todo o filtrar por sucursal si lo añade en query
+        if (req.user.tipo === 'administrador') {
+            if (sucursalId) where.sucursalId = parseInt(sucursalId);
+        } 
+        // Si es Supervisor, solo ve de su sucursal
+        else if (req.user.tipo === 'supervisor') {
+             if (req.user.sucursalId) {
+                where.sucursalId = req.user.sucursalId;
+             }
+        }
+        // Si es Cajero, solo ve su caja asignada
+        else if (req.user.tipo === 'cajero') {
+            if (!req.user.cajaId) {
+                return res.json([]); // Si no tiene caja asignada, no ve ninguna
+            }
+            where.id = req.user.cajaId;
+        }
 
         const cajas = await prisma.caja.findMany({
             where,
@@ -23,6 +42,21 @@ const getCajas = async (req, res) => {
 const getCajaById = async (req, res) => {
     const { id } = req.params;
     try {
+        // Validar acceso si es cajero
+        if (req.user.tipo === 'cajero' && req.user.cajaId !== parseInt(id)) {
+            return res.status(403).json({ error: 'No tienes permiso para ver esta caja' });
+        }
+        // Validar acceso si es supervisor
+        if (req.user.tipo === 'supervisor' && req.user.sucursalId) {
+             const cajaCheck = await prisma.caja.findUnique({
+                 where: { id: parseInt(id) },
+                 select: { sucursalId: true }
+             });
+             if (cajaCheck && cajaCheck.sucursalId !== req.user.sucursalId) {
+                 return res.status(403).json({ error: 'No tienes permiso para ver esta caja de otra sucursal' });
+             }
+        }
+
         const caja = await prisma.caja.findUnique({
             where: { id: parseInt(id) },
             include: { sucursal: true, sesiones: { take: 5, orderBy: { fechaInicio: 'desc' } } }
@@ -112,6 +146,12 @@ const abrirCaja = async (req, res) => {
         return res.status(400).json({ message: 'usuarioId es requerido' });
     }
 
+    // Seguridad: usuarioId debe ser el mismo del token (no puedes abrir caja por otro)
+    // EXCEPTO si es admin/supervisor, tal vez... pero por ahora restrinjamos a que cada uno abre SU sesión.
+    if (parseInt(usuarioId) !== req.user.id) {
+        return res.status(403).json({ message: 'No puedes abrir caja a nombre de otro usuario' });
+    }
+
     try {
         // 1. Verificar que la caja existe
         const caja = await prisma.caja.findUnique({
@@ -120,6 +160,11 @@ const abrirCaja = async (req, res) => {
 
         if (!caja) {
             return res.status(404).json({ message: 'Caja no encontrada' });
+        }
+
+        // Validación de permisos extra (redundante con middleware pero segura)
+        if (req.user.tipo === 'cajero' && req.user.cajaId !== parseInt(id)) {
+            return res.status(403).json({ message: 'No tienes permiso para abrir esta caja' });
         }
 
         // 2. Verificar que la caja no esté ocupada

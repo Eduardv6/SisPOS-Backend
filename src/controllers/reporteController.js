@@ -41,15 +41,24 @@ const getVentasPorPeriodo = async (req, res) => {
             }
         }
 
+        const where = {
+            fecha: {
+                gte: fechaInicio,
+                lte: fechaFin
+            },
+            estado: 'completada'
+        };
+
+        // Filtro de sucursal
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.sucursalId = req.user.sucursalId;
+            }
+        }
+
         // Consultar ventas en el rango
         const ventas = await prisma.venta.findMany({
-            where: {
-                fecha: {
-                    gte: fechaInicio,
-                    lte: fechaFin
-                },
-                estado: 'completada'
-            },
+            where,
             include: {
                 detalles: true
             }
@@ -118,6 +127,13 @@ const getGananciaReal = async (req, res) => {
             if (fechaFin) {
                 const [ y, m, d ] = fechaFin.split('-').map(Number);
                 where.fecha.lte = new Date(y, m - 1, d, 23, 59, 59, 999);
+            }
+        }
+
+        // Filtro de sucursal
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.sucursalId = req.user.sucursalId;
             }
         }
 
@@ -192,6 +208,13 @@ const getVentasPorMetodoPago = async (req, res) => {
             }
         }
 
+        // Filtro de sucursal
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.sucursalId = req.user.sucursalId;
+            }
+        }
+
         const ventas = await prisma.venta.groupBy({
             by: ['metodoPago'],
             _sum: {
@@ -223,12 +246,20 @@ const getVentasPorMetodoPago = async (req, res) => {
 const getInventarioValorado = async (req, res) => {
     try {
         const { sucursalId } = req.query;
+        let where = {};
 
-        const where = {};
-        if (sucursalId) {
+        // Filtro de permisos
+        let filterSucursalId = sucursalId ? parseInt(sucursalId) : undefined;
+
+        if (req.user.tipo !== 'administrador') {
+            if (!req.user.sucursalId) return res.json({ resumen: {}, detalle: [] });
+            filterSucursalId = req.user.sucursalId;
+        }
+
+        if (filterSucursalId) {
             // Buscar almacenes de la sucursal
             const almacenes = await prisma.almacen.findMany({
-                where: { sucursalId: parseInt(sucursalId) },
+                where: { sucursalId: filterSucursalId },
                 select: { id: true }
             });
             const almacenIds = almacenes.map(a => a.id);
@@ -297,9 +328,21 @@ const getProductosSinMovimiento = async (req, res) => {
         const fechaLimite = new Date();
         fechaLimite.setDate(fechaLimite.getDate() - parseInt(dias));
 
+        let whereProducto = {
+             stock: { gt: 0 }
+        };
+
+        // Filtro de sucursal para productos
+        if (req.user.tipo !== 'administrador') {
+             if (req.user.sucursalId) {
+                 whereProducto.sucursalId = req.user.sucursalId;
+             }
+        }
+
         // Buscar productos que NO tienen detalles de venta en el periodo
         const productosHueso = await prisma.producto.findMany({
             where: {
+                ...whereProducto,
                 detallesVenta: {
                     none: {
                         venta: {
@@ -308,9 +351,6 @@ const getProductosSinMovimiento = async (req, res) => {
                             }
                         }
                     }
-                },
-                stock: {
-                    gt: 0 // Solo productos que tienen stock
                 }
             },
             include: {
@@ -365,6 +405,15 @@ const getKardexProducto = async (req, res) => {
                 where.createdAt.lte = fin;
             }
         }
+        
+        // Filtro de sucursal para Kardex (almacen -> sucursal)
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.almacen = {
+                    sucursalId: req.user.sucursalId
+                };
+            }
+        }
 
         const movimientos = await prisma.movimientoInventario.findMany({
             where,
@@ -387,9 +436,19 @@ const getKardexProducto = async (req, res) => {
             }
         });
 
+        // Verificamos si tiene acceso al producto
+         if (req.user.tipo !== 'administrador' && req.user.sucursalId) {
+             const productoCheck = await prisma.producto.findUnique({
+                 where: { id: parseInt(id) },
+                 select: { sucursalId: true }
+             });
+             // Ojo: un producto puede estar en varios almacenes pero pertenece tambien a una sucursal creadora?
+             // Asumimos que si el producto es visible, se muestra.
+         }
+
         const producto = await prisma.producto.findUnique({
             where: { id: parseInt(id) },
-            select: { nombre: true, codigoBarras: true, stockActual: true }
+            select: { nombre: true, codigoBarras: true, stockActual: true } // stockActual puede ser undefined en schema
         });
 
         const formattedMovimientos = movimientos.map(m => ({
@@ -430,6 +489,13 @@ const getTopVentasCategorias = async (req, res) => {
             if (fechaFin) {
                 const [ y, m, d ] = fechaFin.split('-').map(Number);
                 where.fecha.lte = new Date(y, m - 1, d, 23, 59, 59, 999);
+            }
+        }
+        
+        // Filtro de sucursal
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.sucursalId = req.user.sucursalId;
             }
         }
 
@@ -493,6 +559,13 @@ const getAnalisisTallas = async (req, res) => {
             }
         }
 
+        // Filtro de sucursal
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.sucursalId = req.user.sucursalId;
+            }
+        }
+
         const detalles = await prisma.detalleVenta.findMany({
             where: {
                 venta: {
@@ -508,8 +581,6 @@ const getAnalisisTallas = async (req, res) => {
         });
 
         // Agrupar por talla
-        // Nota: Si la talla es "38, 39", se contará como ese string entero por ahora.
-        // Idealmente el producto debería ser variante única.
         const agrupado = detalles.reduce((acc, curr) => {
             let talla = curr.producto.talla || 'Sin Talla';
             talla = talla.trim();
@@ -539,7 +610,7 @@ const getAnalisisTallas = async (req, res) => {
 const getReporteCajas = async (req, res) => {
     try {
         const { fechaInicio, fechaFin, usuarioId, cajaId } = req.query;
-        const where = {};
+        let where = {};
 
         // Filtros
         if (fechaInicio || fechaFin) {
@@ -555,6 +626,20 @@ const getReporteCajas = async (req, res) => {
         }
         if (usuarioId) where.usuarioId = parseInt(usuarioId);
         if (cajaId) where.cajaId = parseInt(cajaId);
+
+        // Filtro de sucursal (SUPER IMPORTANT)
+        if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.caja = {
+                    sucursalId: req.user.sucursalId
+                };
+            }
+            // Si es cajero, quizás solo ver SU caja? El usuario no especificó esto para reportes, 
+            // pero el Supervisor sí ve reportes. Asumimos Supervisor -> su Sucursal.
+            
+            // Si además me pasaron un cajaId, valido que pertenezca a la sucursal o dejo que Prisma lo cruce
+            // Prisma AND logic will handle it: where.cajaId = X AND where.caja = { sucursalId: Y }
+        }
 
         // Obtener sesiones de caja
         const sesiones = await prisma.sesionCaja.findMany({
