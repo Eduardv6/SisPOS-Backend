@@ -50,7 +50,10 @@ const getVentasPorPeriodo = async (req, res) => {
         };
 
         // Filtro de sucursal
-        if (req.user.tipo !== 'administrador') {
+        const { sucursalId } = req.query;
+        if (sucursalId) {
+            where.sucursalId = parseInt(sucursalId);
+        } else if (req.user.tipo !== 'administrador') {
             if (req.user.sucursalId) {
                 where.sucursalId = req.user.sucursalId;
             }
@@ -131,7 +134,10 @@ const getGananciaReal = async (req, res) => {
         }
 
         // Filtro de sucursal
-        if (req.user.tipo !== 'administrador') {
+        const { sucursalId } = req.query;
+        if (sucursalId) {
+            where.sucursalId = parseInt(sucursalId);
+        } else if (req.user.tipo !== 'administrador') {
             if (req.user.sucursalId) {
                 where.sucursalId = req.user.sucursalId;
             }
@@ -209,7 +215,10 @@ const getVentasPorMetodoPago = async (req, res) => {
         }
 
         // Filtro de sucursal
-        if (req.user.tipo !== 'administrador') {
+        const { sucursalId } = req.query;
+        if (sucursalId) {
+            where.sucursalId = parseInt(sucursalId);
+        } else if (req.user.tipo !== 'administrador') {
             if (req.user.sucursalId) {
                 where.sucursalId = req.user.sucursalId;
             }
@@ -493,7 +502,10 @@ const getTopVentasCategorias = async (req, res) => {
         }
         
         // Filtro de sucursal
-        if (req.user.tipo !== 'administrador') {
+        const { sucursalId } = req.query;
+        if (sucursalId) {
+            where.sucursalId = parseInt(sucursalId);
+        } else if (req.user.tipo !== 'administrador') {
             if (req.user.sucursalId) {
                 where.sucursalId = req.user.sucursalId;
             }
@@ -560,7 +572,10 @@ const getAnalisisTallas = async (req, res) => {
         }
 
         // Filtro de sucursal
-        if (req.user.tipo !== 'administrador') {
+        const { sucursalId } = req.query;
+        if (sucursalId) {
+            where.sucursalId = parseInt(sucursalId);
+        } else if (req.user.tipo !== 'administrador') {
             if (req.user.sucursalId) {
                 where.sucursalId = req.user.sucursalId;
             }
@@ -628,17 +643,17 @@ const getReporteCajas = async (req, res) => {
         if (cajaId) where.cajaId = parseInt(cajaId);
 
         // Filtro de sucursal (SUPER IMPORTANT)
-        if (req.user.tipo !== 'administrador') {
+        const { sucursalId } = req.query;
+        if (sucursalId) {
+            where.caja = {
+                sucursalId: parseInt(sucursalId)
+            };
+        } else if (req.user.tipo !== 'administrador') {
             if (req.user.sucursalId) {
                 where.caja = {
                     sucursalId: req.user.sucursalId
                 };
             }
-            // Si es cajero, quizás solo ver SU caja? El usuario no especificó esto para reportes, 
-            // pero el Supervisor sí ve reportes. Asumimos Supervisor -> su Sucursal.
-            
-            // Si además me pasaron un cajaId, valido que pertenezca a la sucursal o dejo que Prisma lo cruce
-            // Prisma AND logic will handle it: where.cajaId = X AND where.caja = { sucursalId: Y }
         }
 
         // Obtener sesiones de caja
