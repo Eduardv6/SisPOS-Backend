@@ -20,4 +20,8 @@ router.get('/bi/tallas', verifyToken, isSupervisorOrAdmin, reporteController.get
 // Reporte de Cajas
 router.get('/cajas-sesiones', verifyToken, isSupervisorOrAdmin, reporteController.getReporteCajas);
 
+// Reporte de Clientes
+router.get('/clientes', verifyToken, reporteController.getReporteClientes);
+
+
 export default router;

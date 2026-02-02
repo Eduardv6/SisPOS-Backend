@@ -141,7 +141,7 @@ model Producto {
   color           String?  @db.VarChar(100) // Ej: "Negro, Blanco, Rojo"
   precioCompra    Decimal  @default(0.00) @map("precio_compra") @db.Decimal(10, 2)
   precioVenta     Decimal  @default(0.00) @map("precio_venta") @db.Decimal(10, 2)
-  codigoBarras    String?  @unique @map("codigo_barras") @db.VarChar(100)
+  codigoBarras    String?  @map("codigo_barras") @db.VarChar(100)
   codigoInterno   String?  @map("codigo_interno") @db.VarChar(100)
   stock           Int      @default(0)
   stockMinimo     Int      @default(0) @map("stock_minimo")
@@ -214,13 +214,12 @@ model MovimientoInventario {
 }
 
 model Cliente {
-  id        Int      @id @default(autoincrement())
-  nombre    String   @db.VarChar(150)
-  email     String?  @db.VarChar(100)
-  direccion String?  @db.Text
-  celular   String?  @db.VarChar(20)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           Int      @id @default(autoincrement())
+  nombre       String   @db.VarChar(150)
+  nroDocumento String?  @map("nro_documento") @db.VarChar(20)
+  celular      String?  @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   ventas Venta[]
 

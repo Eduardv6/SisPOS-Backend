@@ -8,7 +8,7 @@ const getClientes = async (req, res) => {
         const where = search ? {
             OR: [
                 { nombre: { contains: search } },
-                { email: { contains: search } },
+                { nroDocumento: { contains: search } },
                 { celular: { contains: search } }
             ]
         } : {};
@@ -44,10 +44,10 @@ const getClienteById = async (req, res) => {
 
 // Crear cliente
 const createCliente = async (req, res) => {
-    const { nombre, email, direccion, celular } = req.body;
+    const { nombre, nroDocumento, celular } = req.body;
     try {
         const cliente = await prisma.cliente.create({
-            data: { nombre, email, direccion, celular }
+            data: { nombre, nroDocumento, celular }
         });
         res.status(201).json(cliente);
     } catch (error) {
@@ -59,11 +59,11 @@ const createCliente = async (req, res) => {
 // Actualizar cliente
 const updateCliente = async (req, res) => {
     const { id } = req.params;
-    const { nombre, email, direccion, celular } = req.body;
+    const { nombre, nroDocumento, celular } = req.body;
     try {
         const cliente = await prisma.cliente.update({
             where: { id: parseInt(id) },
-            data: { nombre, email, direccion, celular }
+            data: { nombre, nroDocumento, celular }
         });
         res.json(cliente);
     } catch (error) {

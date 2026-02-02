@@ -91,7 +91,8 @@ const updateStock = async (req, res) => {
 
 // Ajustar stock (incrementar/decrementar relativo)
 const ajustarStock = async (req, res) => {
-    const { productoId, almacenId, ajuste, motivo, usuarioId } = req.body; 
+    const { productoId, almacenId, ajuste, motivo } = req.body;
+    const usuarioId = req.user?.id; 
     
     try {
         // Validación de permisos
@@ -253,7 +254,8 @@ const getStockByProducto = async (req, res) => {
 
 // Transferir stock entre almacenes (busca producto equivalente en destino)
 const transferirStock = async (req, res) => {
-    const { productoOrigenId, almacenOrigenId, almacenDestinoId, cantidad, usuarioId } = req.body;
+    const { productoOrigenId, almacenOrigenId, almacenDestinoId, cantidad } = req.body;
+    const usuarioId = req.user?.id;
     
     console.log('\n🔄 TRANSFERENCIA INICIADA:');
     console.log('   productoOrigenId:', productoOrigenId);

@@ -710,7 +710,10 @@ const getReporteCajas = async (req, res) => {
                 totalVendido: ventasEfectivo + ventasQR,
                 montoFinal: sesion.montoFinal ? parseFloat(sesion.montoFinal) : null,
                 // Saldo teórico en efectivo = Inicial + VentasEfvo + Ingresos - Retiros
-                saldoTeorico: parseFloat(sesion.montoInicial) + ventasEfectivo + ingresos - retiros
+                saldoTeorico: parseFloat(sesion.montoInicial) + ventasEfectivo + ingresos - retiros,
+                diferencia: sesion.montoFinal 
+                    ? parseFloat(sesion.montoFinal) - (parseFloat(sesion.montoInicial) + ventasEfectivo + ingresos - retiros)
+                    : null
             };
         });
 
@@ -722,6 +725,98 @@ const getReporteCajas = async (req, res) => {
     }
 };
 
+// Reporte de Clientes (Estadísticas de Compra)
+const getReporteClientes = async (req, res) => {
+    try {
+        const { fechaInicio, fechaFin, sucursalId } = req.query;
+        
+        // 1. Construir filtros para ventas
+        const where = {
+            estado: 'completada',
+            clienteId: { not: null } // Solo ventas con cliente registrado
+        };
+
+        // Filtro de fecha
+        if (fechaInicio || fechaFin) {
+            where.fecha = {};
+            if (fechaInicio) {
+                const [ y, m, d ] = fechaInicio.split('-').map(Number);
+                where.fecha.gte = new Date(y, m - 1, d, 0, 0, 0, 0);
+            }
+            if (fechaFin) {
+                const [ y, m, d ] = fechaFin.split('-').map(Number);
+                where.fecha.lte = new Date(y, m - 1, d, 23, 59, 59, 999);
+            }
+        }
+
+        // Filtro de sucursal
+        if (sucursalId) {
+            where.sucursalId = parseInt(sucursalId);
+        } else if (req.user.tipo !== 'administrador') {
+            if (req.user.sucursalId) {
+                where.sucursalId = req.user.sucursalId;
+            }
+        }
+
+        // 2. Obtener todas las ventas con sus detalles y cliente
+        const ventas = await prisma.venta.findMany({
+            where,
+            include: {
+                cliente: true,
+                detalles: true
+            }
+        });
+
+        // 3. Agrupar por cliente y calcular estadísticas
+        const clientesMap = new Map();
+        
+        ventas.forEach(venta => {
+            if (!venta.cliente) return; // Skip ventas sin cliente (por si acaso)
+            
+            const clienteId = venta.cliente.id;
+            if (!clientesMap.has(clienteId)) {
+                clientesMap.set(clienteId, {
+                    id: venta.cliente.id,
+                    nombre: venta.cliente.nombre,
+                    email: venta.cliente.email,
+                    celular: venta.cliente.celular,
+                    cantidadProductos: 0,
+                    montoTotal: 0
+                });
+            }
+            
+            const cliente = clientesMap.get(clienteId);
+            // Sumar cantidad de productos
+            venta.detalles.forEach(detalle => {
+                cliente.cantidadProductos += detalle.cantidad;
+            });
+            // Sumar monto total
+            cliente.montoTotal += parseFloat(venta.total);
+        });
+
+        // 4. Convertir a array y ordenar por monto total descendente
+        const clientes = Array.from(clientesMap.values())
+            .sort((a, b) => b.montoTotal - a.montoTotal);
+
+        // 5. Calcular totales generales
+        const resumen = {
+            totalClientes: clientes.length,
+            totalProductosVendidos: clientes.reduce((sum, c) => sum + c.cantidadProductos, 0),
+            totalMontoVentas: clientes.reduce((sum, c) => sum + c.montoTotal, 0)
+        };
+
+        res.json({
+            resumen,
+            clientes
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error generando reporte de clientes' });
+    }
+};
+
+
 export { 
     getVentasPorPeriodo, 
     getGananciaReal, 
@@ -731,5 +826,6 @@ export {
     getKardexProducto,
     getTopVentasCategorias,
     getAnalisisTallas,
-    getReporteCajas
+    getReporteCajas,
+    getReporteClientes
 };
