@@ -195,7 +195,7 @@ const getMovimientos = async (req, res) => {
                 skip,
                 take: parseInt(limit),
                 include: {
-                    producto: { select: { nombre: true, codigoBarras: true } },
+                    producto: { select: { nombre: true, codigoBarras: true, talla: true, color: true } },
                     almacen: { select: { nombre: true, sucursal: { select: { nombre: true } } } },
                     usuario: { select: { nombres: true } }
                 },

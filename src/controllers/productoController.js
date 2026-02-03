@@ -153,14 +153,87 @@ const getProductoById = async (req, res) => {
 const createProducto = async (req, res) => {
     const {
         nombre, categoriaId, sucursalId, almacenId, talla, color, 
-        precioCompra, precioVenta, codigoBarras, codigoInterno, stock, stockMinimo
+        precioCompra, precioVenta, codigoBarras, codigoInterno, stock, stockMinimo,
+        variantes: variantesRaw, // Nuevo campo para variantes
+        codigoInternoBase // Para generar códigos secuenciales si es necesario
     } = req.body;
 
     // Obtener URL de la imagen si se subió
     const imagen = req.file ? `/uploads/productos/${req.file.filename}` : null;
 
     try {
-        // Usar transacción para crear producto e inventario inicial
+        // Lógica para Variantes (Batch Creation)
+        if (variantesRaw) {
+            let variantes = [];
+            try {
+                variantes = JSON.parse(variantesRaw);
+            } catch (e) {
+                return res.status(400).json({ error: 'Formato de variantes inválido' });
+            }
+
+            if (!Array.isArray(variantes) || variantes.length === 0) {
+                 return res.status(400).json({ error: 'Lista de variantes vacía' });
+            }
+
+            const resultados = await prisma.$transaction(async (tx) => {
+                const productosCreados = [];
+
+                for (const variante of variantes) {
+                     // Generar código interno si no viene (o usar base + sufijo)
+                     const codigoInternoFinal = variante.codigoInterno || 
+                        (codigoInternoBase ? `${codigoInternoBase}-${variante.talla}` : `ZAP-${Date.now()}-${variante.talla}`);
+
+                    // 1. Crear producto individual
+                    const producto = await tx.producto.create({
+                        data: {
+                            nombre, // Mismo nombre para todos
+                            categoriaId: parseInt(categoriaId),
+                            sucursalId: parseInt(sucursalId),
+                            almacenId: parseInt(almacenId),
+                            talla: variante.talla, // Talla específica
+                            color, // Mismo color
+                            precioCompra: parseFloat(precioCompra) || 0,
+                            precioVenta: parseFloat(precioVenta) || 0,
+                            codigoBarras: variante.codigoBarras || null, // Código específico
+                            codigoInterno: codigoInternoFinal,
+                            stock: parseInt(variante.stock) || 0, // Stock específico
+                            stockMinimo: parseInt(stockMinimo) || 0,
+                            imagen // Misma imagen
+                        },
+                        include: { categoria: true, sucursal: true, almacen: true }
+                    });
+
+                    // 2. Inventario inicial
+                    const stockInicial = parseInt(variante.stock) || 0;
+                    if (stockInicial > 0 && almacenId) {
+                        await tx.inventario.create({
+                            data: {
+                                productoId: producto.id,
+                                almacenId: parseInt(almacenId),
+                                cantidad: stockInicial,
+                                ubicacionFisica: 'N/A'
+                            }
+                        });
+
+                        await tx.movimientoInventario.create({
+                            data: {
+                                productoId: producto.id,
+                                almacenId: parseInt(almacenId),
+                                tipo: 'ENTRADA',
+                                cantidad: stockInicial,
+                                motivo: 'Stock inicial (Creación Lote)'
+                            }
+                        });
+                    }
+                    productosCreados.push(producto);
+                }
+                return productosCreados;
+            });
+
+            return res.status(201).json({ message: `${resultados.length} productos creados`, data: resultados });
+        }
+
+        // Lógica Original (Single Product)
         const resultado = await prisma.$transaction(async (tx) => {
             // 1. Crear el producto
             const producto = await tx.producto.create({
@@ -213,7 +286,7 @@ const createProducto = async (req, res) => {
     } catch (error) {
         console.error(error);
         if (error.code === 'P2002') {
-            return res.status(400).json({ error: 'El código de barras ya existe' });
+            return res.status(400).json({ error: 'El código de barras o interno ya existe' });
         }
         res.status(500).json({ error: 'Error creando producto' });
     }
