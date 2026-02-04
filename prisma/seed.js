@@ -8,11 +8,11 @@ async function main() {
   const passwordHash = await bcrypt.hash('admin123', 10);
 
   const admin = await prisma.usuario.upsert({
-    where: { email: 'admin@sispos.com' },
+    where: { email: 'admin@gmail.com' },
     update: { contrasena: passwordHash },
     create: {
       nombres: 'Administrador',
-      email: 'admin@sispos.com',
+      email: 'admin@gmail.com',
       contrasena: passwordHash,
       tipo: 'administrador',
       estado: true
@@ -20,7 +20,7 @@ async function main() {
   });
 
   console.log('✅ Usuario admin creado:');
-  console.log('   📧 Email: admin@sispos.com');
+  console.log('   📧 Email: admin@gmail.com');
   console.log('   🔑 Contraseña: admin123');
 }
 
