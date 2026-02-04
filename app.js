@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './src/routes/authRoutes.js';
@@ -23,6 +24,9 @@ const __dirname = path.dirname(__filename);
 
 // Configuraciones de express
 const app = express();
+
+// Habilitar CORS para todas las peticiones
+app.use(cors());
 
 // Middleware para parsear JSON
 app.use(express.json());
