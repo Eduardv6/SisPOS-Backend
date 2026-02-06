@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { exportToExcel, exportTableToExcel, getBackupStats } from '../controllers/backupController.js';
-import { verifyToken, isAdmin } from '../middleware/authMiddleware.js';
+import { verifyToken, isAdmin } from '../middlewares/authMiddleware.js';
 
 const router = Router();
 
