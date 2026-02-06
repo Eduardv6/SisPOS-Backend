@@ -1,35 +1,38 @@
 import { PrismaClient } from "@prisma/client";
 import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
 
 const prisma = new PrismaClient();
 
-// Obtener __dirname en ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Configuración de multer para subida de imágenes
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const uploadPath = path.join(__dirname, '../../uploads/productos');
-        // Crear directorio si no existe
-        if (!fs.existsSync(uploadPath)) {
-            fs.mkdirSync(uploadPath, { recursive: true });
-        }
-        cb(null, uploadPath);
-    },
-    filename: function (req, file, cb) {
-        // Generar nombre único: timestamp + nombre original
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        cb(null, 'producto-' + uniqueSuffix + ext);
-    }
+// ==================== CONFIGURACIÓN CLOUDINARY ====================
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Función para subir imagen a Cloudinary
+const uploadToCloudinary = (imageBuffer) => {
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+            {
+                folder: 'sispos/productos',
+                resource_type: 'image',
+                transformation: [{ width: 500, height: 500, crop: 'limit', quality: 'auto' }]
+            },
+            (error, result) => {
+                if (error) reject(error);
+                else resolve(result.secure_url);
+            }
+        );
+        uploadStream.end(imageBuffer);
+    });
+};
+
+// Configuración de multer con memoria (para Cloudinary)
+const storage = multer.memoryStorage();
+
 const fileFilter = (req, file, cb) => {
-    // Solo permitir imágenes
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
@@ -38,7 +41,7 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-const upload = multer({ 
+const upload = multer({
     storage: storage,
     fileFilter: fileFilter,
     limits: { fileSize: 5 * 1024 * 1024 } // Límite de 5MB
@@ -67,7 +70,7 @@ const getProductos = async (req, res) => {
                 return res.json({
                     data: [],
                     meta: { total: 0, totalPages: 0, currentPage: parseInt(page), itemsPerPage: parseInt(limit) }
-                }); 
+                });
             }
             where.sucursalId = req.user.sucursalId;
         }
@@ -78,7 +81,7 @@ const getProductos = async (req, res) => {
                 where,
                 skip,
                 take: parseInt(limit),
-                include: { 
+                include: {
                     categoria: true,
                     sucursal: true,
                     almacen: true,
@@ -93,7 +96,7 @@ const getProductos = async (req, res) => {
             const stockTotal = producto.inventarios.reduce((sum, inv) => {
                 return sum + parseFloat(inv.cantidad);
             }, 0);
-            
+
             const { inventarios, ...productoData } = producto;
             return {
                 ...productoData,
@@ -123,22 +126,22 @@ const getProductoById = async (req, res) => {
     try {
         const producto = await prisma.producto.findUnique({
             where: { id: parseInt(id) },
-            include: { 
-                categoria: true, 
+            include: {
+                categoria: true,
                 sucursal: true,
                 almacen: true,
-                inventarios: { include: { almacen: true } } 
+                inventarios: { include: { almacen: true } }
             }
         });
         if (!producto) {
             return res.status(404).json({ error: 'Producto no encontrado' });
         }
-        
+
         // Calcular stock total desde inventarios
         const stockTotal = producto.inventarios.reduce((sum, inv) => {
             return sum + parseFloat(inv.cantidad);
         }, 0);
-        
+
         res.json({
             ...producto,
             stock: stockTotal
@@ -152,14 +155,22 @@ const getProductoById = async (req, res) => {
 // Crear producto
 const createProducto = async (req, res) => {
     const {
-        nombre, categoriaId, sucursalId, almacenId, talla, color, 
+        nombre, categoriaId, sucursalId, almacenId, talla, color,
         precioCompra, precioVenta, codigoBarras, codigoInterno, stock, stockMinimo,
         variantes: variantesRaw, // Nuevo campo para variantes
         codigoInternoBase // Para generar códigos secuenciales si es necesario
     } = req.body;
 
-    // Obtener URL de la imagen si se subió
-    const imagen = req.file ? `/uploads/productos/${req.file.filename}` : null;
+    // Subir imagen a Cloudinary si se proporcionó
+    let imagen = null;
+    if (req.file) {
+        try {
+            imagen = await uploadToCloudinary(req.file.buffer);
+        } catch (imgError) {
+            console.error('Error subiendo imagen a Cloudinary:', imgError);
+            return res.status(500).json({ error: 'Error subiendo imagen' });
+        }
+    }
 
     try {
         // Lógica para Variantes (Batch Creation)
@@ -172,15 +183,15 @@ const createProducto = async (req, res) => {
             }
 
             if (!Array.isArray(variantes) || variantes.length === 0) {
-                 return res.status(400).json({ error: 'Lista de variantes vacía' });
+                return res.status(400).json({ error: 'Lista de variantes vacía' });
             }
 
             const resultados = await prisma.$transaction(async (tx) => {
                 const productosCreados = [];
 
                 for (const variante of variantes) {
-                     // Generar código interno si no viene (o usar base + sufijo)
-                     const codigoInternoFinal = variante.codigoInterno || 
+                    // Generar código interno si no viene (o usar base + sufijo)
+                    const codigoInternoFinal = variante.codigoInterno ||
                         (codigoInternoBase ? `${codigoInternoBase}-${variante.talla}` : `ZAP-${Date.now()}-${variante.talla}`);
 
                     // 1. Crear producto individual
@@ -300,28 +311,21 @@ const updateProducto = async (req, res) => {
         precioCompra, precioVenta, codigoBarras, codigoInterno, stock, stockMinimo
     } = req.body;
 
-    // Obtener URL de la imagen si se subió una nueva
-    const imagen = req.file ? `/uploads/productos/${req.file.filename}` : undefined;
+    // Subir nueva imagen a Cloudinary si se proporcionó
+    let imagen = undefined;
+    if (req.file) {
+        try {
+            imagen = await uploadToCloudinary(req.file.buffer);
+        } catch (imgError) {
+            console.error('Error subiendo imagen a Cloudinary:', imgError);
+            return res.status(500).json({ error: 'Error subiendo imagen' });
+        }
+    }
 
     try {
         // Advertencia si se intenta actualizar el stock directamente
         if (stock !== undefined) {
             console.warn('⚠️ Intento de actualizar stock directamente. Use el módulo de inventario para ajustar stock.');
-        }
-
-        // Si hay una nueva imagen, eliminar la anterior
-        if (imagen) {
-            const productoActual = await prisma.producto.findUnique({
-                where: { id: parseInt(id) },
-                select: { imagen: true }
-            });
-            
-            if (productoActual?.imagen) {
-                const imagenAnterior = path.join(__dirname, '../../', productoActual.imagen);
-                if (fs.existsSync(imagenAnterior)) {
-                    fs.unlinkSync(imagenAnterior);
-                }
-            }
         }
 
         const producto = await prisma.producto.update({
@@ -383,9 +387,9 @@ const getProductoByBarcode = async (req, res) => {
                     { codigoInterno: codigo }
                 ]
             },
-            include: { 
-                categoria: true, 
-                sucursal: true, 
+            include: {
+                categoria: true,
+                sucursal: true,
                 almacen: true,
                 inventarios: true
             }
@@ -393,12 +397,12 @@ const getProductoByBarcode = async (req, res) => {
         if (!producto) {
             return res.status(404).json({ error: 'Producto no encontrado' });
         }
-        
+
         // Calcular stock total desde inventarios
         const stockTotal = producto.inventarios.reduce((sum, inv) => {
             return sum + parseFloat(inv.cantidad);
         }, 0);
-        
+
         res.json({
             ...producto,
             stock: stockTotal
