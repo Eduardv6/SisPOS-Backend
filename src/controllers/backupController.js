@@ -43,8 +43,17 @@ const exportToExcel = async (req, res) => {
 
         // ==================== USUARIOS ====================
         const usuarios = await prisma.usuario.findMany({
-            include: { sucursal: true },
-            select: { id: true, nombres: true, email: true, nroDoc: true, telefono: true, tipo: true, estado: true, sucursal: true, createdAt: true }
+            select: {
+                id: true,
+                nombres: true,
+                email: true,
+                nroDoc: true,
+                telefono: true,
+                tipo: true,
+                estado: true,
+                sucursal: { select: { nombre: true } },
+                createdAt: true
+            }
         });
         const usuariosSheet = workbook.addWorksheet('Usuarios');
         usuariosSheet.columns = [
