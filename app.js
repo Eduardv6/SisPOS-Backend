@@ -18,6 +18,7 @@ import sesionCajaRoutes from './src/routes/sesionCajaRoutes.js';
 import ventaRoutes from './src/routes/ventaRoutes.js';
 import dashboardRoutes from './src/routes/dashboardRoutes.js';
 import reporteRoutes from './src/routes/reporteRoutes.js';
+import backupRoutes from './src/routes/backupRoutes.js';
 
 // Obtener __dirname en ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -62,6 +63,7 @@ app.use('/api/sesion-caja', sesionCajaRoutes);
 app.use('/api/ventas', ventaRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reportes', reporteRoutes);
+app.use('/api/backup', backupRoutes);
 
 // Ruta de health check
 app.get('/api/health', (req, res) => {
