@@ -145,18 +145,6 @@ const exportToExcel = async (req, res) => {
         clientes.forEach(row => clientesSheet.addRow(row));
         styleHeader(clientesSheet);
 
-        // ==================== PROVEEDORES ====================
-        const proveedores = await prisma.proveedor.findMany();
-        const proveedoresSheet = workbook.addWorksheet('Proveedores');
-        proveedoresSheet.columns = [
-            { header: 'ID', key: 'id', width: 10 },
-            { header: 'Nombre', key: 'nombre', width: 35 },
-            { header: 'Dirección', key: 'direccion', width: 40 },
-            { header: 'Celular', key: 'celular', width: 15 },
-            { header: 'Contacto', key: 'contacto', width: 25 },
-        ];
-        proveedores.forEach(row => proveedoresSheet.addRow(row));
-        styleHeader(proveedoresSheet);
 
         // ==================== VENTAS ====================
         const ventas = await prisma.venta.findMany({
@@ -266,7 +254,7 @@ const exportToExcel = async (req, res) => {
 // Exportar una tabla específica
 const exportTableToExcel = async (req, res) => {
     const { tabla } = req.params;
-    const allowedTables = ['productos', 'ventas', 'clientes', 'inventario', 'usuarios', 'proveedores'];
+    const allowedTables = ['productos', 'ventas', 'clientes', 'inventario', 'usuarios'];
 
     if (!allowedTables.includes(tabla)) {
         return res.status(400).json({ error: `Tabla no permitida. Tablas disponibles: ${allowedTables.join(', ')}` });
@@ -300,20 +288,66 @@ const exportTableToExcel = async (req, res) => {
                 break;
 
             case 'ventas':
-                data = await prisma.venta.findMany({ include: { cliente: true, usuario: true } });
+                data = await prisma.venta.findMany({
+                    include: { cliente: true, usuario: true, detalles: { include: { producto: true } } }
+                });
                 sheet = workbook.addWorksheet('Ventas');
                 sheet.columns = [
                     { header: 'ID', key: 'id', width: 10 },
                     { header: 'Fecha', key: 'fecha', width: 20 },
                     { header: 'Cliente', key: 'cliente', width: 30 },
+                    { header: 'Productos', key: 'productos', width: 50 },
+                    { header: 'Usuario', key: 'usuario', width: 25 },
+                    { header: 'Método Pago', key: 'metodoPago', width: 15 },
                     { header: 'Total', key: 'total', width: 15 },
                     { header: 'Estado', key: 'estado', width: 12 },
                 ];
-                data.forEach(row => sheet.addRow({
-                    ...row,
-                    cliente: row.cliente?.nombre || 'Sin cliente',
-                    total: parseFloat(row.total),
-                }));
+                data.forEach(row => {
+                    const productosTexto = (row.detalles || [])
+                        .map(d => {
+                            const nombre = d.producto?.nombre || 'Producto';
+                            const talla = d.producto?.talla ? ` (${d.producto.talla})` : '';
+                            const cant = d.cantidad || 1;
+                            return cant > 1 ? `${nombre}${talla} x${cant}` : `${nombre}${talla}`;
+                        })
+                        .join(', ');
+                    sheet.addRow({
+                        ...row,
+                        cliente: row.cliente?.nombre || 'Sin cliente',
+                        productos: productosTexto,
+                        usuario: row.usuario?.nombres || '',
+                        total: parseFloat(row.total),
+                    });
+                });
+                styleHeader(sheet);
+
+                // Add detail sheet with products sold
+                const detalleSheet = workbook.addWorksheet('Detalle Ventas');
+                detalleSheet.columns = [
+                    { header: 'ID Venta', key: 'ventaId', width: 10 },
+                    { header: 'Fecha', key: 'fecha', width: 20 },
+                    { header: 'Producto', key: 'producto', width: 35 },
+                    { header: 'Talla', key: 'talla', width: 12 },
+                    { header: 'Color', key: 'color', width: 12 },
+                    { header: 'Cantidad', key: 'cantidad', width: 10 },
+                    { header: 'Precio Unitario', key: 'precioUnitario', width: 15 },
+                    { header: 'Subtotal', key: 'subtotal', width: 15 },
+                ];
+                data.forEach(venta => {
+                    venta.detalles.forEach(detalle => {
+                        detalleSheet.addRow({
+                            ventaId: venta.id,
+                            fecha: venta.fecha,
+                            producto: detalle.producto?.nombre || '',
+                            talla: detalle.producto?.talla || '',
+                            color: detalle.producto?.color || '',
+                            cantidad: detalle.cantidad,
+                            precioUnitario: parseFloat(detalle.precioUnitario),
+                            subtotal: parseFloat(detalle.subtotal),
+                        });
+                    });
+                });
+                styleHeader(detalleSheet);
                 break;
 
             case 'clientes':
@@ -361,17 +395,7 @@ const exportTableToExcel = async (req, res) => {
                 }));
                 break;
 
-            case 'proveedores':
-                data = await prisma.proveedor.findMany();
-                sheet = workbook.addWorksheet('Proveedores');
-                sheet.columns = [
-                    { header: 'ID', key: 'id', width: 10 },
-                    { header: 'Nombre', key: 'nombre', width: 35 },
-                    { header: 'Dirección', key: 'direccion', width: 40 },
-                    { header: 'Celular', key: 'celular', width: 15 },
-                ];
-                data.forEach(row => sheet.addRow(row));
-                break;
+
         }
 
         styleHeader(sheet);
@@ -417,7 +441,6 @@ const getBackupStats = async (req, res) => {
             categorias,
             productos,
             clientes,
-            proveedores,
             ventas,
             inventarios
         ] = await Promise.all([
@@ -427,7 +450,6 @@ const getBackupStats = async (req, res) => {
             prisma.categoria.count(),
             prisma.producto.count(),
             prisma.cliente.count(),
-            prisma.proveedor.count(),
             prisma.venta.count(),
             prisma.inventario.count(),
         ]);
@@ -441,11 +463,10 @@ const getBackupStats = async (req, res) => {
                 categorias,
                 productos,
                 clientes,
-                proveedores,
                 ventas,
                 inventarios,
             },
-            totalRegistros: sucursales + cajas + usuarios + categorias + productos + clientes + proveedores + ventas + inventarios
+            totalRegistros: sucursales + cajas + usuarios + categorias + productos + clientes + ventas + inventarios
         });
     } catch (error) {
         console.error('Error obteniendo estadísticas:', error);
