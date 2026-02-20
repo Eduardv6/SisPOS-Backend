@@ -98,6 +98,7 @@ CREATE TABLE "productos" (
     "stock" INTEGER NOT NULL DEFAULT 0,
     "stock_minimo" INTEGER NOT NULL DEFAULT 0,
     "imagen" VARCHAR(255),
+    "activo" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
