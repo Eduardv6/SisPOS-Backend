@@ -63,6 +63,7 @@ const getProductos = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     let where = {
+      activo: true, // Solo mostrar productos activos
       ...(search && { nombre: { contains: search } }),
       ...(categoriaId && { categoriaId: parseInt(categoriaId) }),
       ...(almacenId && { almacenId: parseInt(almacenId) }),
@@ -421,24 +422,39 @@ const updateProducto = async (req, res) => {
   }
 };
 
-// Eliminar producto
+// Eliminar producto (hard delete si no tiene relaciones, soft delete si tiene)
 const deleteProducto = async (req, res) => {
   const { id } = req.params;
   try {
+    // Intentar eliminación física primero
     await prisma.producto.delete({
       where: { id: parseInt(id) },
     });
     res.json({ message: "Producto eliminado correctamente" });
   } catch (error) {
-    console.error(error);
+    // Si falla por FK (tiene ventas/compras asociadas), hacer soft delete
+    if (error.code === "P2003") {
+      try {
+        await prisma.producto.update({
+          where: { id: parseInt(id) },
+          data: { activo: false },
+        });
+        return res.json({
+          message:
+            "Producto desactivado correctamente (tiene registros históricos asociados)",
+          softDeleted: true,
+        });
+      } catch (softDeleteError) {
+        console.error(softDeleteError);
+        return res
+          .status(500)
+          .json({ error: "Error al desactivar el producto" });
+      }
+    }
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
-    if (error.code === "P2003") {
-      return res
-        .status(400)
-        .json({ error: "No se puede eliminar, tiene ventas asociadas" });
-    }
+    console.error(error);
     res.status(500).json({ error: "Error eliminando producto" });
   }
 };
@@ -449,6 +465,7 @@ const getProductoByBarcode = async (req, res) => {
   try {
     const producto = await prisma.producto.findFirst({
       where: {
+        activo: true, // Solo buscar productos activos
         OR: [{ codigoBarras: codigo }, { codigoInterno: codigo }],
       },
       include: {
