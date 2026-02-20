@@ -1,38 +1,21 @@
 import { PrismaClient } from "@prisma/client";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import multer from "multer";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
 
 const prisma = new PrismaClient();
 
-// Configuración de multer para almacenamiento local
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = path.join(__dirname, "../../uploads");
-    // Crear carpeta si no existe
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
+// Configuración de Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Configuración de multer con almacenamiento en memoria (para subir a Cloudinary)
+const storage = multer.memoryStorage();
+
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-  ];
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -48,6 +31,58 @@ const upload = multer({
   fileFilter: fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 }, // Límite de 5MB
 });
+
+// Helper: Subir buffer de imagen a Cloudinary
+const uploadToCloudinary = (fileBuffer, folder = 'productos') => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: folder,
+        resource_type: 'image',
+        transformation: [
+          { width: 800, height: 800, crop: 'limit' }, // Redimensionar máximo 800x800
+          { quality: 'auto', fetch_format: 'auto' },  // Optimizar calidad y formato
+        ],
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+};
+
+// Helper: Extraer public_id de una URL de Cloudinary para poder eliminarla
+const getCloudinaryPublicId = (imageUrl) => {
+  if (!imageUrl || !imageUrl.includes('cloudinary.com')) return null;
+  try {
+    // URL format: https://res.cloudinary.com/cloud/image/upload/v123/folder/filename.ext
+    const parts = imageUrl.split('/upload/');
+    if (parts.length < 2) return null;
+    const pathAfterUpload = parts[1]; // v123/folder/filename.ext
+    // Quitar la versión (v123/) si existe
+    const withoutVersion = pathAfterUpload.replace(/^v\d+\//, '');
+    // Quitar la extensión del archivo
+    const publicId = withoutVersion.replace(/\.[^/.]+$/, '');
+    return publicId;
+  } catch {
+    return null;
+  }
+};
+
+// Helper: Eliminar imagen de Cloudinary
+const deleteFromCloudinary = async (imageUrl) => {
+  const publicId = getCloudinaryPublicId(imageUrl);
+  if (publicId) {
+    try {
+      await cloudinary.uploader.destroy(publicId);
+      console.log(`🗑️ Imagen eliminada de Cloudinary: ${publicId}`);
+    } catch (err) {
+      console.error("Error al eliminar imagen de Cloudinary:", err);
+    }
+  }
+};
 
 // Obtener todos los productos
 const getProductos = async (req, res) => {
@@ -185,12 +220,16 @@ const createProducto = async (req, res) => {
     codigoInternoBase, // Para generar códigos secuenciales si es necesario
   } = req.body;
 
-  // Proceso de subida de imagen (Local)
+  // Subir imagen a Cloudinary
   let imagen = null;
   if (req.file) {
-    // Construir URL relativa para guardar en DB
-    // Se asume que el frontend tiene acceso a la carpeta uploads mediante un endpoint estático
-    imagen = `/uploads/${req.file.filename}`;
+    try {
+      const result = await uploadToCloudinary(req.file.buffer);
+      imagen = result.secure_url;
+    } catch (err) {
+      console.error("Error subiendo imagen a Cloudinary:", err);
+      return res.status(500).json({ error: "Error subiendo imagen" });
+    }
   }
 
   try {
@@ -200,16 +239,16 @@ const createProducto = async (req, res) => {
       try {
         variantes = JSON.parse(variantesRaw);
       } catch (e) {
-        // En caso de error, intentar borrar la imagen subida si existe
-        if (req.file) {
-          fs.unlinkSync(req.file.path);
+        // En caso de error, intentar borrar la imagen subida de Cloudinary
+        if (imagen) {
+          await deleteFromCloudinary(imagen);
         }
         return res.status(400).json({ error: "Formato de variantes inválido" });
       }
 
       if (!Array.isArray(variantes) || variantes.length === 0) {
-        if (req.file) {
-          fs.unlinkSync(req.file.path);
+        if (imagen) {
+          await deleteFromCloudinary(imagen);
         }
         return res.status(400).json({ error: "Lista de variantes vacía" });
       }
@@ -240,7 +279,7 @@ const createProducto = async (req, res) => {
               codigoInterno: codigoInternoFinal,
               stock: parseInt(variante.stock) || 0, // Stock específico
               stockMinimo: parseInt(stockMinimo) || 0,
-              imagen, // Misma imagen
+              imagen, // Misma imagen (URL de Cloudinary)
             },
             include: { categoria: true, sucursal: true, almacen: true },
           });
@@ -295,7 +334,7 @@ const createProducto = async (req, res) => {
           codigoInterno,
           stock: parseInt(stock) || 0,
           stockMinimo: parseInt(stockMinimo) || 0,
-          imagen, // Guardar URL de la imagen
+          imagen, // URL de Cloudinary
         },
         include: { categoria: true, sucursal: true, almacen: true },
       });
@@ -357,32 +396,24 @@ const updateProducto = async (req, res) => {
     stockMinimo,
   } = req.body;
 
-  // Subir nueva imagen (Local)
+  // Subir nueva imagen a Cloudinary
   let imagen = undefined;
   if (req.file) {
-    imagen = `/uploads/${req.file.filename}`;
-
-    // Opcional: Eliminar imagen anterior si existe
     try {
+      // Subir nueva imagen a Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer);
+      imagen = result.secure_url;
+
+      // Eliminar imagen anterior de Cloudinary si existe
       const productoAnterior = await prisma.producto.findUnique({
         where: { id: parseInt(id) },
       });
-      if (
-        productoAnterior &&
-        productoAnterior.imagen &&
-        productoAnterior.imagen.startsWith("/uploads/")
-      ) {
-        const oldImagePath = path.join(
-          __dirname,
-          "../../",
-          productoAnterior.imagen,
-        );
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
+      if (productoAnterior && productoAnterior.imagen) {
+        await deleteFromCloudinary(productoAnterior.imagen);
       }
     } catch (err) {
-      console.error("Error al eliminar imagen anterior:", err);
+      console.error("Error subiendo imagen a Cloudinary:", err);
+      return res.status(500).json({ error: "Error subiendo imagen" });
     }
   }
 
@@ -426,10 +457,21 @@ const updateProducto = async (req, res) => {
 const deleteProducto = async (req, res) => {
   const { id } = req.params;
   try {
+    // Obtener producto para eliminar su imagen de Cloudinary
+    const producto = await prisma.producto.findUnique({
+      where: { id: parseInt(id) },
+    });
+
     // Intentar eliminación física primero
     await prisma.producto.delete({
       where: { id: parseInt(id) },
     });
+
+    // Si la eliminación fue exitosa, borrar imagen de Cloudinary
+    if (producto && producto.imagen) {
+      await deleteFromCloudinary(producto.imagen);
+    }
+
     res.json({ message: "Producto eliminado correctamente" });
   } catch (error) {
     // Si falla por FK (tiene ventas/compras asociadas), hacer soft delete
