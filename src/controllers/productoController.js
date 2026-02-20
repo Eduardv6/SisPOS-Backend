@@ -453,49 +453,34 @@ const updateProducto = async (req, res) => {
   }
 };
 
-// Eliminar producto (hard delete si no tiene relaciones, soft delete si tiene)
+// Eliminar producto (borrado lógico - soft delete)
 const deleteProducto = async (req, res) => {
   const { id } = req.params;
   try {
-    // Obtener producto para eliminar su imagen de Cloudinary
+    // Verificar que el producto existe
     const producto = await prisma.producto.findUnique({
       where: { id: parseInt(id) },
     });
 
-    // Intentar eliminación física primero
-    await prisma.producto.delete({
-      where: { id: parseInt(id) },
-    });
-
-    // Si la eliminación fue exitosa, borrar imagen de Cloudinary
-    if (producto && producto.imagen) {
-      await deleteFromCloudinary(producto.imagen);
-    }
-
-    res.json({ message: "Producto eliminado correctamente" });
-  } catch (error) {
-    // Si falla por FK (tiene ventas/compras asociadas), hacer soft delete
-    if (error.code === "P2003") {
-      try {
-        await prisma.producto.update({
-          where: { id: parseInt(id) },
-          data: { activo: false },
-        });
-        return res.json({
-          message:
-            "Producto desactivado correctamente (tiene registros históricos asociados)",
-          softDeleted: true,
-        });
-      } catch (softDeleteError) {
-        console.error(softDeleteError);
-        return res
-          .status(500)
-          .json({ error: "Error al desactivar el producto" });
-      }
-    }
-    if (error.code === "P2025") {
+    if (!producto) {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
+
+    if (!producto.activo) {
+      return res.status(400).json({ error: "El producto ya está eliminado" });
+    }
+
+    // Borrado lógico: solo cambiar el estado a inactivo
+    await prisma.producto.update({
+      where: { id: parseInt(id) },
+      data: { activo: false },
+    });
+
+    res.json({
+      message: "Producto eliminado correctamente",
+      softDeleted: true,
+    });
+  } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error eliminando producto" });
   }
